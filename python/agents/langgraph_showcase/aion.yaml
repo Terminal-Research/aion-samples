@@ -1,0 +1,48 @@
+aion:
+  agents:
+    showcase:
+      path: "./src/graph.py:create_graph"
+      name: "Aion Showcase (LangGraph)"
+      description: >-
+        Guided tour of the platform features available to an agent:
+        streaming, cards, artifacts, human-in-the-loop, reactions, explicit A2A
+        responses, runtime context, deployment configuration and custom HTTP
+        routes. Every response is written by the agent itself.
+      version: "1.0.0"
+      input_modes: [ "text" ]
+      output_modes: [ "text" ]
+      capabilities:
+        streaming: true
+      skills:
+        - id: "feature_showcase"
+          name: "Feature Showcase"
+          description: >-
+            Each keyword runs one demonstration and replies with the SDK call
+            that produced it. Send "help" for the menu.
+          tags: [ "showcase", "streaming", "artifacts", "cards", "a2a" ]
+          examples:
+            - "help"
+            - "stream"
+            - "typing"
+            - "card"
+            - "file"
+            - "data"
+            - "composite"
+            - "ask"
+            - "react"
+            - "metadata"
+            - "progress"
+            - "task"
+            - "message"
+            - "fail"
+            - "context"
+            - "config"
+            - "http"
+
+      # Filled in per environment by an administrator and delivered with the
+      # invocation. The `config` command reads these back.
+      configuration:
+        greeting:
+          type: "string"
+          description: "Heading shown at the top of the menu"
+          default: "Aion Showcase"

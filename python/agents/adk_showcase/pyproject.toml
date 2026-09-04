@@ -1,0 +1,18 @@
+[tool.poetry]
+name = "adk-showcase"
+version = "1.0.0"
+description = "Guided tour of the Aion platform features, built with Google ADK"
+authors = ["Terminal Research Team <support@terminal.exchange>"]
+readme = "README.md"
+packages = [{ include = "src" }]
+
+[tool.poetry.dependencies]
+python = ">=3.12,<3.15"
+aion-sdk = { git = "https://github.com/Terminal-Research/aion-python-sdk", branch = "main", subdirectory = "libs/aion-sdk", extras = ["adk-server"] }
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.4.1"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

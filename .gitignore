@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Poetry
+poetry.lock
+
+# Environment
+.env
+.env.local
+
+# Editors
+.idea/
+.vscode/
+.DS_Store
