@@ -8,15 +8,17 @@ from langchain_core.messages import BaseMessage
 from langgraph.runtime import Runtime
 from langgraph.types import interrupt
 
-from src.commands import COMMANDS_BY_KEY
-from src.replies import say
+from src.replies import with_footer
 from src.state import AgentState
-
-ASK = COMMANDS_BY_KEY["ask"]
 
 
 def _resumed_text(value: object) -> str:
-    """Extract the user's answer from whatever the resume payload carries."""
+    """Extract the user's answer from whatever the resume payload carries.
+
+    The server resumes the graph with ``{"messages": [HumanMessage(...)]}``, and
+    the message content arrives as content blocks rather than a plain string —
+    the same shape the inbound message has on any other turn.
+    """
     if isinstance(value, str):
         return value.strip()
     if isinstance(value, dict):
@@ -26,6 +28,10 @@ def _resumed_text(value: object) -> str:
             content = last.content if isinstance(last, BaseMessage) else last
             if isinstance(content, str):
                 return content.strip()
+            if isinstance(content, list):
+                return "".join(
+                    block.get("text", "") for block in content if isinstance(block, dict)
+                ).strip()
     return ""
 
 
@@ -38,14 +44,17 @@ async def ask_node(state: AgentState, *, runtime: Runtime[AionRuntimeContext]) -
     effects out of the node that interrupts.
     """
     thread = Thread.from_context(runtime.context)
-    return await say(
-        thread,
-        ASK,
-        "Before I continue I need one detail: which environment should I use?",
-        "",
-        "Reply with anything — the task is parked in the input-required state "
-        "until you do, and picks up from the same point afterwards.",
+
+    reply = await thread.reply(
+        with_footer(
+            "ask",
+            "Before I continue I need one detail: which environment should I use?",
+            "",
+            "Reply with anything — the task is parked in the input-required state "
+            "until you do, and picks up from the same point afterwards.",
+        )
     )
+    return {"messages": [reply]}
 
 
 async def ask_wait_node(state: AgentState, *, runtime: Runtime[AionRuntimeContext]) -> dict:
@@ -53,11 +62,14 @@ async def ask_wait_node(state: AgentState, *, runtime: Runtime[AionRuntimeContex
     answer = _resumed_text(interrupt("Waiting for the environment name"))
 
     thread = Thread.from_context(runtime.context)
-    return await say(
-        thread,
-        ASK,
-        f'Got it — continuing with "{answer or "no answer given"}".',
-        "",
-        "The run did not restart: it resumed inside the node that was waiting, "
-        "with everything it had already computed still in state.",
+
+    reply = await thread.reply(
+        with_footer(
+            "ask",
+            f'Got it — continuing with "{answer or "no answer given"}".',
+            "",
+            "The run did not restart: it resumed inside the node that was waiting, "
+            "with everything it had already computed still in state.",
+        )
     )
+    return {"messages": [reply]}

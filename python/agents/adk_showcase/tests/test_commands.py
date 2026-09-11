@@ -1,8 +1,13 @@
 """Registry and parsing tests — no SDK or server required."""
 
+import re
+from pathlib import Path
+
 import pytest
 
 from src.commands import COMMANDS, examples, menu_lines, parse_command, parse_input
+
+SAMPLE_ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_keys_are_unique():
@@ -20,6 +25,7 @@ def test_keys_are_unique():
         ("/card", "card"),
         ("show me the card", "card"),
         ("data", "data"),
+        ("llm What is the A2A protocol?", "llm"),
     ],
 )
 def test_input_resolves_to_command(text, expected):
@@ -38,15 +44,25 @@ def test_unmatched_input_returns_none(text):
 @pytest.mark.parametrize(
     ("text", "expected"),
     [
+        ("llm What is A2A?", "What is A2A?"),
+        ("llm   Explain streaming, briefly.", "Explain streaming, briefly."),
+        ("Please llm What is A2A?", "What is A2A?"),
+        ("LLM: what is a {prompt}?", "what is a {prompt}?"),
+        ("llm", ""),
         ("card What is A2A?", "What is A2A?"),
-        ("card   Explain streaming, briefly.", "Explain streaming, briefly."),
-        ("Show me the card What is A2A?", "What is A2A?"),
-        ("card", ""),
     ],
 )
 def test_argument_is_taken_verbatim(text, expected):
     """Everything after the keyword reaches the command unchanged."""
     assert parse_input(text).argument == expected
+
+
+def test_llm_is_the_command_that_takes_a_prompt():
+    """`llm` is the one command with an argument, and the menu shows it."""
+    llm = next(command for command in COMMANDS if command.key == "llm")
+    assert llm.argument_hint == "prompt"
+    assert llm.usage == "llm {prompt}"
+    assert [command.key for command in COMMANDS if command.argument_hint] == ["llm"]
 
 
 def test_menu_spells_out_declared_arguments():
@@ -73,3 +89,16 @@ def test_footer_points_at_api_and_source():
         assert command.api in footer
         assert command.source in footer
         assert command.source.startswith("src/")
+
+
+def test_the_call_in_the_footer_is_written_in_the_source_file():
+    """The SDK call a footer names is visible in the file the footer points at.
+
+    That is the promise the footer makes, and it is the reason handlers call the
+    SDK themselves instead of going through a reply helper. Checking it here
+    keeps a future helper from quietly hiding the call again.
+    """
+    for command in COMMANDS:
+        call = re.match(r"[\w.]+", command.api).group()
+        source = (SAMPLE_ROOT / command.source).read_text(encoding="utf-8")
+        assert call in source, f"{command.key}: `{call}` is missing from {command.source}"

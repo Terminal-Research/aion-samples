@@ -1,0 +1,22 @@
+aion:
+  agents:
+    plain:
+      path: "./src/graph.py:create_graph"
+      name: "Plain LangGraph Agent"
+      description: >-
+        A LangGraph graph with nothing Aion-specific in it, served as an Aion
+        agent as is: the message goes into state, the reply comes out of it,
+        and the conversation is remembered between turns.
+      version: "1.0.0"
+      input_modes: [ "text" ]
+      output_modes: [ "text" ]
+      skills:
+        - id: "echo"
+          name: "Echo"
+          description: >-
+            Replies with a summary of what you sent and how many messages the
+            conversation holds so far.
+          tags: [ "plain", "langgraph" ]
+          examples:
+            - "Hello there"
+            - "Is this conversation remembered?"

@@ -5,17 +5,11 @@ from __future__ import annotations
 from aion.adk.authoring.invocation import AionInvocationContext, Thread
 from aion.core.a2a import data_artifact
 
-from src.commands import COMMANDS_BY_KEY
-from src.replies import say
-from src.streaming import TYPEWRITER_DELAY_SECONDS
-
-STREAM = COMMANDS_BY_KEY["stream"]
-TYPING = COMMANDS_BY_KEY["typing"]
-REACT = COMMANDS_BY_KEY["react"]
-METADATA = COMMANDS_BY_KEY["metadata"]
+from src.replies import with_footer
+from src.streaming import TYPEWRITER_DELAY_SECONDS, stream_text
 
 
-async def stream_handler(ctx: AionInvocationContext) -> None:
+async def stream_handler(ctx: AionInvocationContext, argument: str) -> None:
     """Stream one reply a few words at a time.
 
     ``thread.reply()`` accepts an async iterator of strings and emits every
@@ -23,23 +17,23 @@ async def stream_handler(ctx: AionInvocationContext) -> None:
     A model-backed agent passes its own token stream here instead.
     """
     thread = Thread.from_context(ctx.aion_runtime_context)
-    await say(
-        thread,
-        STREAM,
+
+    text = with_footer(
+        "stream",
         "This sentence reached you in small chunks, the way a model's tokens "
         "arrive — grouped a few words at a time, so a short answer costs a "
         "handful of events instead of one per word. When the stream ends, "
         "the SDK emits the whole message once more so the conversation "
         "history holds a single entry rather than a pile of fragments.",
         "",
-        "This is the only command that paces itself. Everywhere else the "
-        "chunks go out back to back, because a deliberate pause is time "
-        "you would spend waiting for nothing.",
-        delay=TYPEWRITER_DELAY_SECONDS,
+        "This is the only command that streams text the agent already had: "
+        "every other reply is one `thread.reply(text)` call. The `llm` "
+        "command streams too, but those chunks are an `LlmAgent`'s events.",
     )
+    await thread.reply(stream_text(text, delay=TYPEWRITER_DELAY_SECONDS))
 
 
-async def typing_handler(ctx: AionInvocationContext) -> None:
+async def typing_handler(ctx: AionInvocationContext, argument: str) -> None:
     """Emit ephemeral indicators, then a durable reply.
 
     Ephemeral events reach the client but are never persisted in task history.
@@ -49,16 +43,17 @@ async def typing_handler(ctx: AionInvocationContext) -> None:
     await thread.typing("Looking that up…")
     await thread.typing("Almost there…")
 
-    await say(
-        thread,
-        TYPING,
-        "You just saw two typing indicators. They were delivered to you but "
-        "not persisted: ask for `context` afterwards and the message count "
-        "will not have counted them.",
+    await thread.reply(
+        with_footer(
+            "typing",
+            "You just saw two typing indicators. They were delivered to you but "
+            "not persisted: ask for `context` afterwards and the message count "
+            "will not have counted them.",
+        )
     )
 
 
-async def react_handler(ctx: AionInvocationContext) -> None:
+async def react_handler(ctx: AionInvocationContext, argument: str) -> None:
     """Add a reaction to the inbound message, then remove it.
 
     Reactions target a provider message, so they need an inbound event carrying
@@ -68,28 +63,30 @@ async def react_handler(ctx: AionInvocationContext) -> None:
     thread = Thread.from_context(ctx.aion_runtime_context)
 
     if thread.message is None or ctx.aion_runtime_context.event is None:
-        await say(
-            thread,
-            REACT,
-            "This turn did not arrive through a distribution, so there is no "
-            "provider message to react to. Send `react` from a connected "
-            "channel and a thumbs-up will appear on your message and then "
-            "disappear.",
+        await thread.reply(
+            with_footer(
+                "react",
+                "This turn did not arrive through a distribution, so there is no "
+                "provider message to react to. Send `react` from a connected "
+                "channel and a thumbs-up will appear on your message and then "
+                "disappear.",
+            )
         )
         return
 
     await thread.message.react("thumbsup", display_value=":thumbsup:")
     await thread.message.react("thumbsup", operation="remove")
 
-    await say(
-        thread,
-        REACT,
-        "A thumbs-up was added to your message and then removed again. Both "
-        "operations go out as reaction actions for the distribution to apply.",
+    await thread.reply(
+        with_footer(
+            "react",
+            "A thumbs-up was added to your message and then removed again. Both "
+            "operations go out as reaction actions for the distribution to apply.",
+        )
     )
 
 
-async def metadata_handler(ctx: AionInvocationContext) -> None:
+async def metadata_handler(ctx: AionInvocationContext, argument: str) -> None:
     """Attach custom metadata to a message and to an artifact.
 
     Keys beginning with ``aion:`` are reserved for the platform; anything else
@@ -106,10 +103,11 @@ async def metadata_handler(ctx: AionInvocationContext) -> None:
         metadata={"showcase.step": "artifact"},
     )
 
-    await say(
-        thread,
-        METADATA,
-        "Two events went out with custom metadata: one message and one data "
-        "artifact. Inspect them in the raw A2A stream — metadata is preserved "
-        "verbatim, except for keys under the reserved `aion:` prefix.",
+    await thread.reply(
+        with_footer(
+            "metadata",
+            "Two events went out with custom metadata: one message and one data "
+            "artifact. Inspect them in the raw A2A stream — metadata is preserved "
+            "verbatim, except for keys under the reserved `aion:` prefix.",
+        )
     )

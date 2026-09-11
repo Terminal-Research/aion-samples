@@ -1,0 +1,22 @@
+aion:
+  agents:
+    plain:
+      path: "./src/agent.py:create_agent"
+      name: "Plain ADK Agent"
+      description: >-
+        An ADK agent with nothing Aion-specific in it, served as an Aion agent
+        as is: the message arrives as user content, the reply is the event it
+        yields, and the session is remembered between turns.
+      version: "1.0.0"
+      input_modes: [ "text" ]
+      output_modes: [ "text" ]
+      skills:
+        - id: "echo"
+          name: "Echo"
+          description: >-
+            Replies with a summary of what you sent and how many messages the
+            conversation holds so far.
+          tags: [ "plain", "adk" ]
+          examples:
+            - "Hello there"
+            - "Is this conversation remembered?"

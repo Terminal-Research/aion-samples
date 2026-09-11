@@ -1,5 +1,7 @@
 """Dispatch tests — these import the Aion SDK and Google ADK."""
 
+import inspect
+
 from src.agent import HANDLERS, _inbound_text, create_agent
 from src.commands import COMMANDS, parse_command
 
@@ -7,6 +9,18 @@ from src.commands import COMMANDS, parse_command
 def test_every_command_has_a_handler():
     """The registry and the handler table stay in step."""
     assert set(HANDLERS) == {command.key for command in COMMANDS}
+
+
+def test_every_handler_takes_the_context_and_an_argument():
+    """One arity for all of them, so dispatch never branches on the command.
+
+    The second parameter is the text typed after the keyword; handlers that
+    accept none still take it and ignore it.
+    """
+    for key, handler in HANDLERS.items():
+        parameters = list(inspect.signature(handler).parameters)
+        assert len(parameters) == 2, f"{key}: {parameters}"
+        assert parameters[0] == "ctx", f"{key}: {parameters}"
 
 
 def test_agent_is_named_after_its_aion_yaml_entry():

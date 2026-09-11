@@ -11,14 +11,8 @@ from aion.core.runtime import AionRuntimeContext
 from aion.langgraph.authoring.invocation import Thread
 from langgraph.runtime import Runtime
 
-from src.commands import COMMANDS_BY_KEY
-from src.replies import say
+from src.replies import with_footer
 from src.state import AgentState
-
-PROGRESS = COMMANDS_BY_KEY["progress"]
-TASK = COMMANDS_BY_KEY["task"]
-MESSAGE = COMMANDS_BY_KEY["message"]
-FAIL = COMMANDS_BY_KEY["fail"]
 
 STEPS = ("Fetching input", "Crunching numbers", "Writing the result")
 
@@ -48,14 +42,16 @@ async def progress_node(state: AgentState, *, runtime: Runtime[AionRuntimeContex
         await thread.typing(f"[{index}/{len(STEPS)}] {step}…")
         await asyncio.sleep(1.0)
 
-    return await say(
-        thread,
-        PROGRESS,
-        f"Finished all {len(STEPS)} steps.",
-        "",
-        "To see cancellation, send `progress` again and cancel the task while "
-        "the steps are still coming in.",
+    reply = await thread.reply(
+        with_footer(
+            "progress",
+            f"Finished all {len(STEPS)} steps.",
+            "",
+            "To see cancellation, send `progress` again and cancel the task while "
+            "the steps are still coming in.",
+        )
     )
+    return {"messages": [reply]}
 
 
 async def task_node(state: AgentState, *, runtime: Runtime[AionRuntimeContext]) -> dict:
@@ -89,13 +85,14 @@ async def task_node(state: AgentState, *, runtime: Runtime[AionRuntimeContext]) 
         metadata={"built_by": "showcase"},
     )
 
-    update = await say(
-        thread,
-        TASK,
-        "An explicit A2A Task is on its way out, carrying its own history, one "
-        "artifact and custom metadata.",
+    reply = await thread.reply(
+        with_footer(
+            "task",
+            "An explicit A2A Task is on its way out, carrying its own history, one "
+            "artifact and custom metadata.",
+        )
     )
-    return {**update, "a2a_outbox": A2AOutbox(task=task)}
+    return {"messages": [reply], "a2a_outbox": A2AOutbox(task=task)}
 
 
 async def message_node(state: AgentState, *, runtime: Runtime[AionRuntimeContext]) -> dict:
@@ -115,13 +112,14 @@ async def message_node(state: AgentState, *, runtime: Runtime[AionRuntimeContext
         context_id=context_id,
     )
 
-    update = await say(
-        thread,
-        MESSAGE,
-        "An explicit A2A Message is on its way out — same context, no task "
-        "lifecycle attached.",
+    reply = await thread.reply(
+        with_footer(
+            "message",
+            "An explicit A2A Message is on its way out — same context, no task "
+            "lifecycle attached.",
+        )
     )
-    return {**update, "a2a_outbox": A2AOutbox(message=outbound)}
+    return {"messages": [reply], "a2a_outbox": A2AOutbox(message=outbound)}
 
 
 async def fail_node(state: AgentState, *, runtime: Runtime[AionRuntimeContext]) -> dict:
@@ -148,10 +146,11 @@ async def fail_node(state: AgentState, *, runtime: Runtime[AionRuntimeContext]) 
         metadata={"reason": "demonstration"},
     )
 
-    update = await say(
-        thread,
-        FAIL,
-        "This task is ending in the failed state on purpose. The client should "
-        "see a terminal failure, not a hang and not a success.",
+    reply = await thread.reply(
+        with_footer(
+            "fail",
+            "This task is ending in the failed state on purpose. The client should "
+            "see a terminal failure, not a hang and not a success.",
+        )
     )
-    return {**update, "a2a_outbox": A2AOutbox(task=failed)}
+    return {"messages": [reply], "a2a_outbox": A2AOutbox(task=failed)}

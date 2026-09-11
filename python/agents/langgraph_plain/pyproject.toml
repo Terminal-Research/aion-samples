@@ -1,0 +1,18 @@
+[tool.poetry]
+name = "langgraph-plain"
+version = "1.0.0"
+description = "A LangGraph graph with nothing Aion-specific in it, served as an Aion agent"
+authors = ["Terminal Research Team <support@terminal.exchange>"]
+readme = "README.md"
+packages = [{ include = "src" }]
+
+[tool.poetry.dependencies]
+python = ">=3.12,<3.15"
+aionto-sdk = { version = ">=0.1.0rc2,<0.2.0", extras = ["langgraph-server"] }
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.4.1"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

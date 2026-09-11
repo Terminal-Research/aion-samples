@@ -12,13 +12,7 @@ from aion.core.a2a import A2AOutbox
 from google.adk.events import Event
 from google.adk.events.event_actions import EventActions
 
-from src.commands import COMMANDS_BY_KEY
-from src.replies import say
-
-PROGRESS = COMMANDS_BY_KEY["progress"]
-TASK = COMMANDS_BY_KEY["task"]
-MESSAGE = COMMANDS_BY_KEY["message"]
-FAIL = COMMANDS_BY_KEY["fail"]
+from src.replies import with_footer
 
 STEPS = ("Fetching input", "Crunching numbers", "Writing the result")
 
@@ -35,17 +29,7 @@ def _inbound_ids(ctx: AionInvocationContext) -> tuple[str, str]:
     return str(uuid.uuid4()), str(uuid.uuid4())
 
 
-def _outbox_event(outbox: A2AOutbox) -> Event:
-    """Place an explicit A2A response in the outbox for this turn."""
-    return Event(
-        author="agent",
-        content=None,
-        partial=False,
-        actions=EventActions(state_delta={"a2a_outbox": outbox}),
-    )
-
-
-async def progress_handler(ctx: AionInvocationContext) -> None:
+async def progress_handler(ctx: AionInvocationContext, argument: str) -> None:
     """Report progress while the work is still running.
 
     Each step goes out as an ephemeral event, so the caller sees movement
@@ -59,17 +43,18 @@ async def progress_handler(ctx: AionInvocationContext) -> None:
         await thread.typing(f"[{index}/{len(STEPS)}] {step}…")
         await asyncio.sleep(1.0)
 
-    await say(
-        thread,
-        PROGRESS,
-        f"Finished all {len(STEPS)} steps.",
-        "",
-        "To see cancellation, send `progress` again and cancel the task while "
-        "the steps are still coming in.",
+    await thread.reply(
+        with_footer(
+            "progress",
+            f"Finished all {len(STEPS)} steps.",
+            "",
+            "To see cancellation, send `progress` again and cancel the task while "
+            "the steps are still coming in.",
+        )
     )
 
 
-async def task_handler(ctx: AionInvocationContext) -> AsyncGenerator[Event, None]:
+async def task_handler(ctx: AionInvocationContext, argument: str) -> AsyncGenerator[Event, None]:
     """Answer with an explicit A2A Task instead of letting the SDK build one.
 
     Everything above this uses the thread helpers and lets the server assemble
@@ -100,16 +85,25 @@ async def task_handler(ctx: AionInvocationContext) -> AsyncGenerator[Event, None
         metadata={"built_by": "showcase"},
     )
 
-    await say(
-        thread,
-        TASK,
-        "An explicit A2A Task is on its way out, carrying its own history, one "
-        "artifact and custom metadata.",
+    await thread.reply(
+        with_footer(
+            "task",
+            "An explicit A2A Task is on its way out, carrying its own history, one "
+            "artifact and custom metadata.",
+        )
     )
-    yield _outbox_event(A2AOutbox(task=task))
+
+    # `a2a_outbox` is the session-state key the server reads when it builds
+    # the response, so putting an outbox there replaces what it would assemble.
+    yield Event(
+        author="agent",
+        content=None,
+        partial=False,
+        actions=EventActions(state_delta={"a2a_outbox": A2AOutbox(task=task)}),
+    )
 
 
-async def message_handler(ctx: AionInvocationContext) -> AsyncGenerator[Event, None]:
+async def message_handler(ctx: AionInvocationContext, argument: str) -> AsyncGenerator[Event, None]:
     """Answer with a bare A2A Message.
 
     A Message is the right response when there is no work to track — no task
@@ -126,16 +120,25 @@ async def message_handler(ctx: AionInvocationContext) -> AsyncGenerator[Event, N
         context_id=context_id,
     )
 
-    await say(
-        thread,
-        MESSAGE,
-        "An explicit A2A Message is on its way out — same context, no task "
-        "lifecycle attached.",
+    await thread.reply(
+        with_footer(
+            "message",
+            "An explicit A2A Message is on its way out — same context, no task "
+            "lifecycle attached.",
+        )
     )
-    yield _outbox_event(A2AOutbox(message=outbound))
+
+    # `a2a_outbox` is the session-state key the server reads when it builds
+    # the response.
+    yield Event(
+        author="agent",
+        content=None,
+        partial=False,
+        actions=EventActions(state_delta={"a2a_outbox": A2AOutbox(message=outbound)}),
+    )
 
 
-async def fail_handler(ctx: AionInvocationContext) -> AsyncGenerator[Event, None]:
+async def fail_handler(ctx: AionInvocationContext, argument: str) -> AsyncGenerator[Event, None]:
     """Finish the task in the failed state, on purpose.
 
     Failure is part of the contract: the caller needs a terminal state it can
@@ -158,10 +161,19 @@ async def fail_handler(ctx: AionInvocationContext) -> AsyncGenerator[Event, None
         metadata={"reason": "demonstration"},
     )
 
-    await say(
-        thread,
-        FAIL,
-        "This task is ending in the failed state on purpose. The client should "
-        "see a terminal failure, not a hang and not a success.",
+    await thread.reply(
+        with_footer(
+            "fail",
+            "This task is ending in the failed state on purpose. The client should "
+            "see a terminal failure, not a hang and not a success.",
+        )
     )
-    yield _outbox_event(A2AOutbox(task=failed))
+
+    # `a2a_outbox` is the session-state key the server reads when it builds
+    # the response.
+    yield Event(
+        author="agent",
+        content=None,
+        partial=False,
+        actions=EventActions(state_delta={"a2a_outbox": A2AOutbox(task=failed)}),
+    )

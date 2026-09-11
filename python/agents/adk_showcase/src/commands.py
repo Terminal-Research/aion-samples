@@ -1,9 +1,10 @@
 """Command registry — the single source of truth for the showcase agent.
 
-Everything the agent exposes is derived from ``COMMANDS``: the handler table,
-the menu, the response footers, and the ``skills.examples`` list in
-``aion.yaml``. Adding a demonstration means adding one entry here and one
-handler.
+Everything the agent exposes is derived from ``COMMANDS``: the menu, the
+response footers, the ``/showcase/commands`` endpoint and the
+``skills.examples`` list in ``aion.yaml``. Adding a demonstration means adding
+one entry here, one handler, and one line in the ``HANDLERS`` table of
+``src/agent.py``.
 """
 
 from __future__ import annotations
@@ -55,6 +56,13 @@ COMMANDS: tuple[Command, ...] = (
         source="src/handlers/messaging.py",
     ),
     Command(
+        key="llm",
+        summary="A model answers your prompt through the platform's model service",
+        api="LlmAgent(model=aion_lite_llm(model))",
+        source="src/handlers/llm.py",
+        argument_hint="prompt",
+    ),
+    Command(
         key="typing",
         summary="Ephemeral typing indicator that is never persisted",
         api="thread.typing()",
@@ -81,7 +89,7 @@ COMMANDS: tuple[Command, ...] = (
     Command(
         key="composite",
         summary="One artifact saved twice, so the store keeps both versions",
-        api="artifact_service versioning",
+        api="file_artifact(name=...) twice",
         source="src/handlers/artifacts.py",
     ),
     Command(
@@ -99,7 +107,7 @@ COMMANDS: tuple[Command, ...] = (
     Command(
         key="metadata",
         summary="Custom metadata attached to a message and to an artifact",
-        api="metadata= on reply() and artifacts",
+        api="thread.reply(metadata=...)",
         source="src/handlers/messaging.py",
     ),
     Command(
@@ -147,8 +155,6 @@ COMMANDS: tuple[Command, ...] = (
 )
 
 COMMANDS_BY_KEY: dict[str, Command] = {command.key: command for command in COMMANDS}
-
-MENU_COMMAND = COMMANDS_BY_KEY["help"]
 
 _FILLER_WORDS = frozenset({"show", "demo", "run", "do", "me", "the", "a", "an", "please"})
 _PUNCTUATION = re.compile(r"[^\w\s-]")

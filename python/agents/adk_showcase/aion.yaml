@@ -5,14 +5,13 @@ aion:
       name: "Aion Showcase (ADK)"
       description: >-
         Guided tour of the platform features available to an agent:
-        streaming, cards, artifacts, multi-turn state, reactions, explicit A2A
-        responses, runtime context, deployment configuration and custom HTTP
-        routes. Every response is written by the agent itself.
+        streaming, a model answer through the platform's model service, cards,
+        artifacts, multi-turn state, reactions, explicit A2A responses,
+        runtime context, deployment configuration and custom HTTP routes.
+        Every other response is written by the agent itself.
       version: "1.0.0"
       input_modes: [ "text" ]
       output_modes: [ "text" ]
-      capabilities:
-        streaming: true
       skills:
         - id: "feature_showcase"
           name: "Feature Showcase"
@@ -23,6 +22,7 @@ aion:
           examples:
             - "help"
             - "stream"
+            - "llm What is the A2A protocol?"
             - "typing"
             - "card"
             - "file"
@@ -46,3 +46,10 @@ aion:
           type: "string"
           description: "Heading shown at the top of the menu"
           default: "Aion Showcase"
+        # An `llm` field is a model id; the control plane offers the catalog
+        # for it. The code keeps the same default for turns without an
+        # environment — see DEFAULT_MODEL in src/handlers/llm.py.
+        model:
+          type: "llm"
+          description: "Model that answers the `llm` command"
+          default: "gpt-5-nano"

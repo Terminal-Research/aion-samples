@@ -1,32 +1,23 @@
-"""Shared reply helpers for command nodes."""
+"""The footer every reply ends with."""
 
 from __future__ import annotations
 
-from aion.langgraph.authoring.invocation import Thread
-from langchain_core.messages import AIMessage
-
-from src.commands import Command
-from src.streaming import NO_DELAY, stream_text
+from src.commands import COMMANDS_BY_KEY
 
 
-async def say(thread: Thread, command: Command, *lines: str, delay: float = NO_DELAY) -> dict:
-    """Stream a reply and close it with the command's source footer.
+def with_footer(command_key: str, *lines: str) -> str:
+    """Join the reply lines and append the command's source footer.
 
     The footer is what turns the agent into a browsable index of the platform:
     every answer states which SDK call produced it and where that call lives.
+    Sending the text is left to the caller, so the SDK call the footer names is
+    the one written in the node itself.
 
     Args:
-        thread: Thread bound to the current invocation.
-        command: Command being demonstrated.
+        command_key: Key of the command being demonstrated.
         *lines: Body lines of the reply.
-        delay: Pause between streamed chunks. Defaults to none, so a reply
-            arrives as fast as the transport carries it; the `stream` command
-            passes a real pause because the pacing is what it demonstrates.
 
     Returns:
-        A state update carrying the posted message, or an empty update when the
-        graph runs outside a streaming context.
+        The reply text, footer included.
     """
-    body = "\n".join([*lines, "", command.footer()])
-    message = await thread.reply(stream_text(body, delay=delay))
-    return {"messages": [message]} if isinstance(message, AIMessage) else {}
+    return "\n".join([*lines, "", COMMANDS_BY_KEY[command_key].footer()])

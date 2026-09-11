@@ -12,7 +12,8 @@ class AgentState(TypedDict):
 
     Attributes:
         messages: Conversation history, accumulated across turns that share a
-            context id. The ``context`` command reports its length.
+            context id. Every node returns the message it posted into this
+            list, and the ``context`` command reports its length.
         command: Canonical key of the resolved command, or None when the input
             matched nothing.
         input_text: Raw inbound text, kept so the menu can quote unknown input.

@@ -6,11 +6,8 @@ from aion.core.runtime import AionRuntimeContext
 from aion.langgraph.authoring.invocation import Thread
 from langgraph.runtime import Runtime
 
-from src.commands import COMMANDS_BY_KEY
-from src.replies import say
+from src.replies import with_footer
 from src.state import AgentState
-
-CONTEXT = COMMANDS_BY_KEY["context"]
 
 
 def _show(value: object) -> str:
@@ -33,20 +30,22 @@ async def context_node(state: AgentState, *, runtime: Runtime[AionRuntimeContext
     principal = context.get_principal_identity()
     history_length = len(state.get("messages") or [])
 
-    return await say(
-        thread,
-        CONTEXT,
-        "This turn:",
-        f"  network            {_show(thread.network)}",
-        f"  context id         {_show(thread.context_id)}",
-        f"  parent context id  {_show(thread.parent_context_id)}",
-        f"  event kind         {_show(event.kind if event else None)}",
-        f"  distribution       {_show(distribution.endpoint_type if distribution else None)}",
-        f"  principal          {_show(principal.id if principal else None)}",
-        f"  sender             {_show(thread.message.user.id if thread.message and thread.message.user else None)}",
-        f"  messages in state  {history_length}",
-        "",
-        "Send `context` again in the same conversation: the message count "
-        "grows, because turns sharing a context id share state. Ephemeral "
-        "messages are not counted — they are never persisted.",
+    reply = await thread.reply(
+        with_footer(
+            "context",
+            "This turn:",
+            f"  network            {_show(thread.network)}",
+            f"  context id         {_show(thread.context_id)}",
+            f"  parent context id  {_show(thread.parent_context_id)}",
+            f"  event kind         {_show(event.kind if event else None)}",
+            f"  distribution       {_show(distribution.endpoint_type if distribution else None)}",
+            f"  principal          {_show(principal.id if principal else None)}",
+            f"  sender             {_show(thread.message.user.id if thread.message and thread.message.user else None)}",
+            f"  messages in state  {history_length}",
+            "",
+            "Send `context` again in the same conversation: the message count "
+            "grows, because turns sharing a context id share state. Ephemeral "
+            "messages are not counted — they are never persisted.",
+        )
     )
+    return {"messages": [reply]}

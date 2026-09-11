@@ -12,13 +12,8 @@ from aion.langgraph.authoring.invocation import Thread
 from langgraph.config import get_stream_writer
 from langgraph.runtime import Runtime
 
-from src.commands import COMMANDS_BY_KEY
-from src.replies import say
+from src.replies import with_footer
 from src.state import AgentState
-
-FILE = COMMANDS_BY_KEY["file"]
-DATA = COMMANDS_BY_KEY["data"]
-COMPOSITE = COMMANDS_BY_KEY["composite"]
 
 REPORT = """date,region,units
 2026-01-01,north,120
@@ -46,12 +41,14 @@ async def file_node(state: AgentState, *, runtime: Runtime[AionRuntimeContext]) 
         url_artifact(REMOTE_FILE_URL, mime_type="text/plain", name="rfc9110.txt")
     )
 
-    return await say(
-        thread,
-        FILE,
-        "Two file artifacts: `units.csv` carries its bytes inline, "
-        "`rfc9110.txt` is a reference your client resolves itself.",
+    reply = await thread.reply(
+        with_footer(
+            "file",
+            "Two file artifacts: `units.csv` carries its bytes inline, "
+            "`rfc9110.txt` is a reference your client resolves itself.",
+        )
     )
+    return {"messages": [reply]}
 
 
 async def data_node(state: AgentState, *, runtime: Runtime[AionRuntimeContext]) -> dict:
@@ -69,12 +66,14 @@ async def data_node(state: AgentState, *, runtime: Runtime[AionRuntimeContext]) 
     }
     await thread.reply(data_artifact(payload, name="totals"))
 
-    return await say(
-        thread,
-        DATA,
-        "That artifact holds structured data, not text:",
-        json.dumps(payload, indent=2),
+    reply = await thread.reply(
+        with_footer(
+            "data",
+            "That artifact holds structured data, not text:",
+            json.dumps(payload, indent=2),
+        )
     )
+    return {"messages": [reply]}
 
 
 async def composite_node(state: AgentState, *, runtime: Runtime[AionRuntimeContext]) -> dict:
@@ -88,12 +87,14 @@ async def composite_node(state: AgentState, *, runtime: Runtime[AionRuntimeConte
     writer = get_stream_writer()
 
     if writer is None:
-        return await say(
-            thread,
-            COMPOSITE,
-            "No stream writer is available outside an invocation, so there is "
-            "nothing to append to.",
+        reply = await thread.reply(
+            with_footer(
+                "composite",
+                "No stream writer is available outside an invocation, so there is "
+                "nothing to append to.",
+            )
         )
+        return {"messages": [reply]}
 
     artifact_id = str(uuid.uuid4())
     chapters = ("Chapter one. ", "Chapter two. ", "Chapter three.")
@@ -110,9 +111,11 @@ async def composite_node(state: AgentState, *, runtime: Runtime[AionRuntimeConte
             is_last_chunk=index == len(chapters) - 1,
         )
 
-    return await say(
-        thread,
-        COMPOSITE,
-        f"`story.txt` arrived as {len(chapters)} chunks sharing one artifact id. "
-        "The first opened it, the rest appended, and the last one closed it.",
+    reply = await thread.reply(
+        with_footer(
+            "composite",
+            f"`story.txt` arrived as {len(chapters)} chunks sharing one artifact id. "
+            "The first opened it, the rest appended, and the last one closed it.",
+        )
     )
+    return {"messages": [reply]}

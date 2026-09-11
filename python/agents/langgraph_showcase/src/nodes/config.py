@@ -6,11 +6,8 @@ from aion.core.runtime import AionRuntimeContext
 from aion.langgraph.authoring.invocation import Thread
 from langgraph.runtime import Runtime
 
-from src.commands import COMMANDS_BY_KEY
-from src.replies import say
+from src.replies import with_footer
 from src.state import AgentState
-
-CONFIG = COMMANDS_BY_KEY["config"]
 
 
 async def config_node(state: AgentState, *, runtime: Runtime[AionRuntimeContext]) -> dict:
@@ -26,25 +23,29 @@ async def config_node(state: AgentState, *, runtime: Runtime[AionRuntimeContext]
     environment = runtime.context.get_environment()
 
     if environment is None:
-        return await say(
-            thread,
-            CONFIG,
-            "This turn carries no environment. Configuration reaches an agent "
-            "with the invocation, not through the process environment, and a "
-            "direct local A2A call carries none. Deploy the agent and set "
-            "`greeting` on the environment to see the values here.",
+        reply = await thread.reply(
+            with_footer(
+                "config",
+                "This turn carries no environment. Configuration reaches an agent "
+                "with the invocation, not through the process environment, and a "
+                "direct local A2A call carries none. Deploy the agent and set "
+                "`greeting` on the environment to see the values here.",
+            )
         )
+        return {"messages": [reply]}
 
     variables = environment.configuration_variables or {}
     lines = [f"  {key} = {value}" for key, value in sorted(variables.items())] or ["  (none set)"]
 
-    return await say(
-        thread,
-        CONFIG,
-        f"Environment `{environment.name}` (project {environment.project_id}):",
-        *lines,
-        "",
-        "These come from the `configuration:` block in aion.yaml, filled in per "
-        "environment. Secret-typed values arrive here in plaintext — never echo "
-        "those back the way this sample echoes the rest.",
+    reply = await thread.reply(
+        with_footer(
+            "config",
+            f"Environment `{environment.name}` (project {environment.project_id}):",
+            *lines,
+            "",
+            "These come from the `configuration:` block in aion.yaml, filled in per "
+            "environment. Secret-typed values arrive here in plaintext — never echo "
+            "those back the way this sample echoes the rest.",
+        )
     )
+    return {"messages": [reply]}
