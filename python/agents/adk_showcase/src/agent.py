@@ -1,9 +1,8 @@
 """Agent assembly for the showcase agent.
 
-Dispatch is generated from the command registry: every entry in
-``src.commands.COMMANDS`` maps to one handler. Adding a demonstration means
-adding a registry entry and a handler — the menu, the HTTP listing and the
-agent card examples follow from the same source.
+One keyword per turn selects one handler. Every handler takes the same two
+arguments, so ``HANDLERS`` below is the whole of the dispatch: adding a
+demonstration means adding a registry entry, a handler, and one line there.
 """
 
 from __future__ import annotations
@@ -12,12 +11,11 @@ import inspect
 from collections.abc import AsyncGenerator, Callable
 
 from aion.adk.authoring.invocation import AionInvocationContext, Thread
-from aion.server import app_registry
 from google.adk.agents import BaseAgent
 from google.adk.events import Event
 from typing_extensions import override
 
-from src.api import router as http_router
+import src.api  # registers the /showcase routes with the server
 from src.commands import parse_input
 from src.handlers import (
     answer_handler,
@@ -31,6 +29,7 @@ from src.handlers import (
     file_handler,
     http_handler,
     is_awaiting_answer,
+    llm_handler,
     menu_handler,
     message_handler,
     metadata_handler,
@@ -44,6 +43,7 @@ from src.handlers import (
 HANDLERS: dict[str, Callable] = {
     "help": menu_handler,
     "stream": stream_handler,
+    "llm": llm_handler,
     "typing": typing_handler,
     "card": card_handler,
     "file": file_handler,
@@ -102,13 +102,15 @@ class ShowcaseAgent(BaseAgent):
 
         parsed = parse_input(text)
         if parsed.command is None:
-            await menu_handler(ctx, unrecognized=text)
+            await menu_handler(ctx, text)
             return
 
-        # Only commands that declare an argument hint are handed the rest of
-        # the line; everything else takes the context alone.
-        handler = HANDLERS[parsed.command.key]
-        result = handler(ctx, parsed.argument) if parsed.command.argument_hint else handler(ctx)
+        # Every handler takes (context, argument); a handler that accepts no
+        # argument ignores it. The one thing dispatch has to tell apart is the
+        # shape of what comes back: a handler that only talks through `Thread`
+        # is a coroutine to await, while one that must write session state or
+        # fill the A2A outbox is an async generator of ADK events to forward.
+        result = HANDLERS[parsed.command.key](ctx, parsed.argument)
         if inspect.isasyncgen(result):
             async for event in result:
                 yield event
@@ -122,6 +124,3 @@ def create_agent() -> ShowcaseAgent:
         name="showcase",
         description="Guided tour of the Aion platform features, built with Google ADK",
     )
-
-
-app_registry.add_router(http_router)

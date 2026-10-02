@@ -6,11 +6,8 @@ from aion.core.runtime import AionRuntimeContext
 from aion.langgraph.authoring.invocation import Thread
 from langgraph.runtime import Runtime
 
-from src.commands import COMMANDS_BY_KEY
-from src.replies import say
+from src.replies import with_footer
 from src.state import AgentState
-
-HTTP = COMMANDS_BY_KEY["http"]
 
 
 async def http_node(state: AgentState, *, runtime: Runtime[AionRuntimeContext]) -> dict:
@@ -22,15 +19,17 @@ async def http_node(state: AgentState, *, runtime: Runtime[AionRuntimeContext]) 
     """
     thread = Thread.from_context(runtime.context)
 
-    return await say(
-        thread,
-        HTTP,
-        "Besides the A2A endpoint, this agent serves:",
-        "  GET /showcase/commands          registered in src/api.py",
-        "  GET /.well-known/agent-card.json  agent card, built from aion.yaml",
-        "  GET /.well-known/configuration.json",
-        "  GET /health/",
-        "",
-        "Through the proxy the same routes live under "
-        "/agents/showcase/… — see docs.aion.to for the routing rules.",
+    reply = await thread.reply(
+        with_footer(
+            "http",
+            "Besides the A2A endpoint, this agent serves:",
+            "  GET /showcase/commands          registered in src/api.py",
+            "  GET /.well-known/agent-card.json  agent card, built from aion.yaml",
+            "  GET /.well-known/configuration.json",
+            "  GET /health/",
+            "",
+            "Through the proxy the same routes live under "
+            "/agents/showcase/… — see docs.aion.to for the routing rules.",
+        )
     )
+    return {"messages": [reply]}

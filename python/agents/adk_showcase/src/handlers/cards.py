@@ -5,16 +5,13 @@ from __future__ import annotations
 from aion.adk.authoring.invocation import AionInvocationContext, Thread
 from aion.core.agent.invocation.card import Actions, Button, Card, Divider, Field, Fields, Text
 
-from src.commands import COMMANDS_BY_KEY
-from src.replies import say
-
-CARD = COMMANDS_BY_KEY["card"]
+from src.replies import with_footer
 
 # A card document hosted elsewhere; the client fetches and renders it.
 REMOTE_CARD_URL = "https://docs.aion.to/a2a/extensions/aion/distribution/cards/1.0.0"
 
 
-async def card_handler(ctx: AionInvocationContext) -> None:
+async def card_handler(ctx: AionInvocationContext, argument: str) -> None:
     """Send a composed card and a card referenced by URL.
 
     Cards render natively where the channel supports them and degrade to text
@@ -40,18 +37,19 @@ async def card_handler(ctx: AionInvocationContext) -> None:
             .add(Button("Cards extension", url=REMOTE_CARD_URL))
         )
     )
-    await thread.post(composed)
-    await thread.post(Card(url=REMOTE_CARD_URL))
+    await thread.reply(composed)
+    await thread.reply(Card(url=REMOTE_CARD_URL))
 
-    await say(
-        thread,
-        CARD,
-        "Two cards: the first was composed from typed components, the second "
-        "points at a card document hosted elsewhere. This is the only "
-        "command that sends cards — every other reply is plain text, so a "
-        "channel that renders no cards still gets the whole tour.",
-        "",
-        'The "Try ask" button carries an action id. Pressing it sends a '
-        "card-action event, which this agent routes to the same handler as "
-        "typing `ask` — see src/agent.py.",
+    await thread.reply(
+        with_footer(
+            "card",
+            "Two cards: the first was composed from typed components, the second "
+            "points at a card document hosted elsewhere. This is the only "
+            "command that sends cards — every other reply is plain text, so a "
+            "channel that renders no cards still gets the whole tour.",
+            "",
+            'The "Try ask" button carries an action id. Pressing it sends a '
+            "card-action event, which this agent routes to the same handler as "
+            "typing `ask` — see src/agent.py.",
+        )
     )

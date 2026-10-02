@@ -1,8 +1,9 @@
 """Command registry — the single source of truth for the showcase agent.
 
-Everything the agent exposes is derived from ``COMMANDS``: the graph nodes, the
-menu, the response footers, and the ``skills.examples`` list in ``aion.yaml``.
-Adding a demonstration means adding one entry here and one node function.
+Everything the agent exposes is derived from ``COMMANDS``: the menu, the
+response footers, the ``/showcase/commands`` endpoint and the
+``skills.examples`` list in ``aion.yaml``. Adding a demonstration means adding
+one entry here, one node function, and one edge in ``src/graph.py``.
 """
 
 from __future__ import annotations
@@ -31,11 +32,6 @@ class Command:
     argument_hint: str | None = None
 
     @property
-    def node(self) -> str:
-        """Name of the graph node handling this command."""
-        return f"cmd_{self.key}"
-
-    @property
     def usage(self) -> str:
         """Return the command as the menu spells it, argument included."""
         return f"{self.key} {{{self.argument_hint}}}" if self.argument_hint else self.key
@@ -57,6 +53,13 @@ COMMANDS: tuple[Command, ...] = (
         summary="A single reply streamed in chunks as it is produced",
         api="thread.reply(async iterator)",
         source="src/nodes/messaging.py",
+    ),
+    Command(
+        key="llm",
+        summary="A model answers your prompt through the platform's model service",
+        api="aion_chat_openai(model).astream()",
+        source="src/nodes/llm.py",
+        argument_hint="prompt",
     ),
     Command(
         key="typing",
@@ -91,7 +94,7 @@ COMMANDS: tuple[Command, ...] = (
     Command(
         key="ask",
         summary="Agent asks for missing input, then resumes where it stopped",
-        api="langgraph.types.interrupt()",
+        api="interrupt()",
         source="src/nodes/hitl.py",
     ),
     Command(
@@ -103,7 +106,7 @@ COMMANDS: tuple[Command, ...] = (
     Command(
         key="metadata",
         summary="Custom metadata attached to a message and to an artifact",
-        api="metadata= on reply() and artifacts",
+        api="thread.reply(metadata=...)",
         source="src/nodes/messaging.py",
     ),
     Command(
@@ -151,8 +154,6 @@ COMMANDS: tuple[Command, ...] = (
 )
 
 COMMANDS_BY_KEY: dict[str, Command] = {command.key: command for command in COMMANDS}
-
-MENU_COMMAND = COMMANDS_BY_KEY["help"]
 
 _FILLER_WORDS = frozenset({"show", "demo", "run", "do", "me", "the", "a", "an", "please"})
 _PUNCTUATION = re.compile(r"[^\w\s-]")

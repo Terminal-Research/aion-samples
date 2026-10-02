@@ -5,6 +5,7 @@ JSON-RPC endpoint, the agent card and the health check. The ``http`` command
 tells the user how to call these.
 """
 
+from aion.server import app_registry
 from fastapi import APIRouter
 
 from src.commands import COMMANDS
@@ -26,3 +27,6 @@ async def list_commands() -> dict:
             for command in COMMANDS
         ]
     }
+
+
+app_registry.add_router(router)

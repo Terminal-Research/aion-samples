@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from src.commands import MENU_COMMAND, parse_command, parse_input
+from src.commands import parse_command, parse_input
 from src.state import AgentState
 
 
@@ -30,12 +30,10 @@ async def handle_input(message) -> dict:
 def route_command(state: AgentState) -> str:
     """Return the node that handles the resolved command.
 
-    Unrecognized input falls through to the menu, which quotes what was sent.
+    Every command has a node of the same name. Unrecognized input falls through
+    to the menu, which quotes what was sent.
     """
-    command_key = state.get("command")
-    if command_key is None:
-        return MENU_COMMAND.node
-    return f"cmd_{command_key}"
+    return state["command"] or "help"
 
 
 async def handle_card_action(event) -> dict:
