@@ -16,9 +16,10 @@ from aion.langgraph.authoring.invocation import Thread
 from langchain_core.messages import AIMessage, AIMessageChunk
 
 from src.nodes import llm as llm_module
-from src.nodes.llm import DEFAULT_MODEL, USAGE, llm_node
+from src.nodes.llm import USAGE, llm_node
 
 ANSWER_CHUNKS = ("Hello", ", ", "world")
+STREAM_ID = "lc_run--stream"
 
 
 def _runtime(configuration: dict[str, str] | None = None) -> SimpleNamespace:
@@ -55,7 +56,7 @@ class _FakeChat:
         if self.error is not None:
             raise self.error
         for chunk in ANSWER_CHUNKS:
-            yield AIMessageChunk(content=chunk)
+            yield AIMessageChunk(content=chunk, id=STREAM_ID)
 
 
 @pytest.fixture
@@ -94,17 +95,21 @@ def test_model_comes_from_the_environment(model_calls):
     assert model_calls == ["configured-model"]
 
 
-def test_model_falls_back_to_the_code_default(model_calls):
-    """With no environment, or one that sets no model, the code default is used."""
+def test_no_model_means_no_call(model_calls, replies):
+    """There is no default model: without one the reply says how to set it."""
     asyncio.run(llm_node(_state("hi"), runtime=_runtime(None)))
     asyncio.run(llm_node(_state("hi"), runtime=_runtime({"greeting": "Hi"})))
-    assert model_calls == [DEFAULT_MODEL, DEFAULT_MODEL]
+    assert model_calls == []
+    assert "no environment" in replies[0]
+    assert "Set the `model` field" in replies[1]
 
 
 def test_answer_lands_in_state_as_one_message(model_calls, replies):
     """The streamed chunks are joined into a single AIMessage, ahead of the footer."""
-    update = asyncio.run(llm_node(_state("hi"), runtime=_runtime(None)))
+    update = asyncio.run(llm_node(_state("hi"), runtime=_runtime({"model": "some-model"})))
     assert update["messages"][0].content == "".join(ANSWER_CHUNKS)
+    # Under the streamed id, so LangGraph does not send the answer a second time.
+    assert update["messages"][0].id == STREAM_ID
     assert update["messages"][1].content == replies[0]
 
 
@@ -122,7 +127,7 @@ def test_sdk_refusal_is_explained_in_the_reply(monkeypatch, replies):
     wrapped.__cause__ = refusal
     monkeypatch.setattr(llm_module, "aion_chat_openai", lambda model, **kwargs: _FakeChat(wrapped))
 
-    asyncio.run(llm_node(_state("hi"), runtime=_runtime(None)))
+    asyncio.run(llm_node(_state("hi"), runtime=_runtime({"model": "some-model"})))
 
     assert str(refusal) in replies[0]
 
@@ -136,3 +141,36 @@ def test_model_failure_names_the_configuration_field(monkeypatch, replies):
     asyncio.run(llm_node(_state("hi"), runtime=_runtime({"model": "gone-model"})))
 
     assert "gone-model" in replies[0] and "`model`" in replies[0]
+
+
+class _ServiceError(Exception):
+    """Shaped like the OpenAI client's error: the service's message and code."""
+
+    def __init__(self, message: str, code: str | None):
+        super().__init__(message)
+        self.message = message
+        self.code = code
+
+
+def test_service_refusal_is_quoted_with_advice_for_its_code(monkeypatch, replies):
+    """The service's own words reach the reply, and the advice follows its code."""
+    error = _ServiceError("AgentIdentity d-1 lacks model.execute on Organization o-1.", "model_authorization_denied")
+    monkeypatch.setattr(llm_module, "aion_chat_openai", lambda model, **kwargs: _FakeChat(error))
+
+    asyncio.run(llm_node(_state("hi"), runtime=_runtime({"model": "some-model"})))
+
+    assert error.message in replies[0]
+    assert llm_module.ADVICE["model_authorization_denied"] in replies[0]
+    assert "Resources > Models" not in replies[0]
+
+
+def test_unknown_code_gets_every_likely_cause(monkeypatch, replies):
+    """A code the sample does not know still names both fixes and the error table."""
+    error = _ServiceError("Something new went wrong.", "something_new")
+    monkeypatch.setattr(llm_module, "aion_chat_openai", lambda model, **kwargs: _FakeChat(error))
+
+    asyncio.run(llm_node(_state("hi"), runtime=_runtime({"model": "some-model"})))
+
+    assert error.message in replies[0]
+    assert "`model.execute`" in replies[0] and "`model`" in replies[0]
+    assert llm_module.MODEL_SERVICE_DOCS in replies[0]

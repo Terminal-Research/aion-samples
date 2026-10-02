@@ -47,9 +47,8 @@ aion:
           description: "Heading shown at the top of the menu"
           default: "Aion Showcase"
         # An `llm` field is a model id; the control plane offers the catalog
-        # for it. The code keeps the same default for turns without an
-        # environment — see DEFAULT_MODEL in src/handlers/llm.py.
+        # for it. No default: whoever deploys the agent picks a model, and
+        # `llm` says how to set one until then.
         model:
           type: "llm"
           description: "Model that answers the `llm` command"
-          default: "gpt-5-nano"

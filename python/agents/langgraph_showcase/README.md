@@ -21,10 +21,11 @@ poetry run aion serve
 ```
 
 No credentials are needed for that: every command except `llm` works over a direct
-local call. `llm` calls the platform's model service, which needs two things —
-`AION_CLIENT_ID` / `AION_CLIENT_SECRET` in `.env` (copy `.env.example`) and a turn the
+local call. `llm` calls the platform's model service, which needs three things —
+`AION_CLIENT_ID` / `AION_CLIENT_SECRET` in `.env` (copy `.env.example`), a turn the
 platform delivered, because the model service runs work for the environment's identity
-and a direct local call carries none. Until then, `llm` explains that in its reply
+and a direct local call carries none, and a model chosen in the `model` field of the
+environment's configuration. Until then, `llm` explains what is missing in its reply
 instead of failing.
 
 Talk to it from the terminal chat client:
@@ -97,13 +98,17 @@ what accumulates the conversation history the `context` command counts.
   do something when the turn arrived through a distribution.
 - **The model is configuration, not code.** `aion.yaml` declares a `model` field of type
   `llm`; the control plane offers its model catalog for it, and `llm` reads the value
-  from the environment on every turn. The code keeps the same default for turns that
-  carry no environment, because the default in `aion.yaml` is applied by the control
-  plane, not by the SDK.
+  from the environment on every turn. There is no default, in `aion.yaml` or in the
+  code: whoever deploys the agent picks a model, and until the field is set `llm`
+  makes no call and says how to set it.
 - **A model call needs a principal.** The model service runs work for the environment's
   Daemon Identity, which arrives with a platform-delivered invocation. A direct local
   call has none, so the SDK refuses the call before sending it; `llm` shows that
   refusal in its reply.
+- **The Daemon Identity needs `model.execute`.** Its role must allow running models in
+  the organization (of the agent roles, Organization Agent does). When the model service
+  refuses a call, `llm` quotes the service's reason and, by its error code, says what to
+  change; the codes are listed under Troubleshoot a request in the model service docs.
 - **Secret configuration arrives in plaintext.** `config` echoes the values it receives
   because this sample declares none that are secret. Do not echo real ones.
 - **Metadata keys under `aion:` are reserved.** Anything else you attach travels untouched.

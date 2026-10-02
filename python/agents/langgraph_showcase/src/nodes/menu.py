@@ -19,8 +19,9 @@ INTRO = (
 )
 
 DEFAULT_TITLE = "Aion Showcase — LangGraph"
-"""Title used when the turn carries no environment — see DEFAULT_MODEL in
-src/nodes/llm.py for why the code carries its own copy of an aion.yaml default."""
+"""Title used when the turn carries no environment. The ``default`` of
+``greeting`` in aion.yaml is applied by the control plane, not by the SDK, so a
+direct local call needs the code's own copy."""
 
 
 async def menu_node(state: AgentState, *, runtime: Runtime[AionRuntimeContext]) -> dict:

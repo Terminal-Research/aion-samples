@@ -17,7 +17,7 @@ from google.adk.events import Event
 from google.genai import types
 
 from src.handlers import llm as llm_module
-from src.handlers.llm import DEFAULT_MODEL, USAGE, llm_handler
+from src.handlers.llm import USAGE, llm_handler
 
 ANSWER = "Hello, world"
 
@@ -103,16 +103,18 @@ def test_model_comes_from_the_environment(model_calls):
     assert model_calls == ["configured-model"]
 
 
-def test_model_falls_back_to_the_code_default(model_calls):
-    """With no environment, or one that sets no model, the code default is used."""
+def test_no_model_means_no_call(model_calls, replies):
+    """There is no default model: without one the reply says how to set it."""
     asyncio.run(_collect(_ctx(None), "hi"))
     asyncio.run(_collect(_ctx({"greeting": "Hi"}), "hi"))
-    assert model_calls == [DEFAULT_MODEL, DEFAULT_MODEL]
+    assert model_calls == []
+    assert "no environment" in replies[0]
+    assert "Set the `model` field" in replies[1]
 
 
 def test_agent_events_are_passed_through(model_calls):
     """The LlmAgent's events reach the caller untouched."""
-    events = asyncio.run(_collect(_ctx(None), "hi"))
+    events = asyncio.run(_collect(_ctx({"model": "some-model"}), "hi"))
     assert [event.content.parts[0].text for event in events] == [ANSWER]
 
 
@@ -131,7 +133,7 @@ def test_sdk_refusal_is_explained_in_the_reply(model_calls, replies):
     wrapped.__cause__ = refusal
     _FakeAgent.error = wrapped
 
-    events = asyncio.run(_collect(_ctx(None), "hi"))
+    events = asyncio.run(_collect(_ctx({"model": "some-model"}), "hi"))
 
     assert events == []
     assert str(refusal) in replies[0]
@@ -145,3 +147,37 @@ def test_model_failure_names_the_configuration_field(model_calls, replies):
 
     assert events == []
     assert "gone-model" in replies[0] and "`model`" in replies[0]
+
+
+
+class _ServiceError(Exception):
+    """Shaped like LiteLLM's error: the service's message, and its code when known."""
+
+    def __init__(self, message: str, code: str | None):
+        super().__init__(message)
+        self.message = message
+        self.code = code
+
+
+def test_service_refusal_is_quoted_with_advice_for_its_code(model_calls, replies):
+    """The service's own words reach the reply, and the advice follows its code."""
+    error = _ServiceError("AgentIdentity d-1 lacks model.execute on Organization o-1.", "model_authorization_denied")
+    _FakeAgent.error = error
+
+    asyncio.run(_collect(_ctx({"model": "some-model"}), "hi"))
+
+    assert error.message in replies[0]
+    assert llm_module.ADVICE["model_authorization_denied"] in replies[0]
+    assert "Resources > Models" not in replies[0]
+
+
+def test_unknown_code_gets_every_likely_cause(model_calls, replies):
+    """Without a known code the reply still names both fixes and the error table."""
+    error = _ServiceError("litellm.APIError: Something new went wrong.", None)
+    _FakeAgent.error = error
+
+    asyncio.run(_collect(_ctx({"model": "some-model"}), "hi"))
+
+    assert error.message in replies[0]
+    assert "`model.execute`" in replies[0] and "`model`" in replies[0]
+    assert llm_module.MODEL_SERVICE_DOCS in replies[0]
