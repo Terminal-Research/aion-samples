@@ -8,7 +8,7 @@ from src.nodes.hitl import ask_node, ask_wait_node
 from src.nodes.http import http_node
 from src.nodes.llm import llm_node
 from src.nodes.menu import menu_node
-from src.nodes.messaging import metadata_node, react_node, stream_node, typing_node
+from src.nodes.messaging import metadata_node, react_node, stream_node, thinking_node
 from src.nodes.tasks import fail_node, message_node, progress_node, task_node
 
 __all__ = [
@@ -29,5 +29,5 @@ __all__ = [
     "progress_node",
     "react_node",
     "stream_node",
-    "typing_node",
+    "thinking_node",
 ]

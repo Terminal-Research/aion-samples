@@ -63,9 +63,9 @@ COMMANDS: tuple[Command, ...] = (
         argument_hint="prompt",
     ),
     Command(
-        key="typing",
-        summary="Ephemeral typing indicator that is never persisted",
-        api="thread.typing()",
+        key="thinking",
+        summary="The agent's thoughts, kept beside the history rather than in it",
+        api="thread.thinking()",
         source="src/handlers/messaging.py",
     ),
     Command(
@@ -113,7 +113,7 @@ COMMANDS: tuple[Command, ...] = (
     Command(
         key="progress",
         summary="Long-running work reporting progress before it finishes",
-        api="thread.typing() during work",
+        api="thread.thinking() during work",
         source="src/handlers/tasks.py",
     ),
     Command(

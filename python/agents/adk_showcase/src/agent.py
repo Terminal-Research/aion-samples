@@ -37,14 +37,14 @@ from src.handlers import (
     react_handler,
     stream_handler,
     task_handler,
-    typing_handler,
+    thinking_handler,
 )
 
 HANDLERS: dict[str, Callable] = {
     "help": menu_handler,
     "stream": stream_handler,
     "llm": llm_handler,
-    "typing": typing_handler,
+    "thinking": thinking_handler,
     "card": card_handler,
     "file": file_handler,
     "data": data_handler,

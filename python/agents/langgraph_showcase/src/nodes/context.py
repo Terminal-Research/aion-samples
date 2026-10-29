@@ -44,8 +44,8 @@ async def context_node(state: AgentState, *, runtime: Runtime[AionRuntimeContext
             f"  messages in state  {history_length}",
             "",
             "Send `context` again in the same conversation: the message count "
-            "grows, because turns sharing a context id share state. Ephemeral "
-            "messages are not counted — they are never persisted.",
+            "grows, because turns sharing a context id share state. Thoughts "
+            "are not counted — they are kept in an artifact, not as messages.",
         )
     )
     return {"messages": [reply]}

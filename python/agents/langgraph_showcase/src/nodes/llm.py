@@ -31,9 +31,10 @@ async def llm_node(state: AgentState, *, runtime: Runtime[AionRuntimeContext]) -
     at the platform's model service, so this node calls it the way any
     LangGraph node calls a model. Nothing about the answer goes through
     ``Thread``: the server streams LangGraph's ``messages`` mode, so the
-    chunks from ``astream()`` reach the client as they arrive, and the
-    ``AIMessage`` returned into state becomes the durable reply. Only the
-    closing footer is sent explicitly.
+    chunks from ``astream()`` reach the client as they arrive, as a section
+    of the task's ``aion:stream-delta`` artifact. That artifact is the
+    answer: the ``AIMessage`` returned into state is not sent again. Only
+    the closing footer is sent explicitly.
 
     The model is the ``model`` field of the environment's configuration, with
     no default in the code or in aion.yaml: whoever deploys the agent picks

@@ -8,7 +8,7 @@ from src.handlers.hitl import answer_handler, ask_handler, is_awaiting_answer
 from src.handlers.http import http_handler
 from src.handlers.llm import llm_handler
 from src.handlers.menu import menu_handler
-from src.handlers.messaging import metadata_handler, react_handler, stream_handler, typing_handler
+from src.handlers.messaging import metadata_handler, react_handler, stream_handler, thinking_handler
 from src.handlers.tasks import fail_handler, message_handler, progress_handler, task_handler
 
 __all__ = [
@@ -30,5 +30,5 @@ __all__ = [
     "progress_handler",
     "react_handler",
     "stream_handler",
-    "typing_handler",
+    "thinking_handler",
 ]

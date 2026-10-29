@@ -42,9 +42,9 @@ Send `help` to get the menu — every demonstration is one keyword away from the
 | Send | What happens | Implemented in |
 | --- | --- | --- |
 | `help` | Menu, as plain text | [src/handlers/menu.py](src/handlers/menu.py) |
-| `stream` | One reply arrives a few words at a time, paced, then once as durable history | [src/handlers/messaging.py](src/handlers/messaging.py) |
+| `stream` | The answer arrives a few words at a time, paced, as the task's `aion:stream-delta` artifact | [src/handlers/messaging.py](src/handlers/messaging.py) |
 | `llm {prompt}` | An `LlmAgent` on the platform's model answers the prompt; its events stream the tokens, no `Thread` involved | [src/handlers/llm.py](src/handlers/llm.py) |
-| `typing` | Two typing indicators that are delivered but never persisted | [src/handlers/messaging.py](src/handlers/messaging.py) |
+| `thinking` | Two thoughts, kept in the task's `aion:thinking-delta` artifact rather than the history | [src/handlers/messaging.py](src/handlers/messaging.py) |
 | `card` | A card composed from typed components, and one referenced by URL | [src/handlers/cards.py](src/handlers/cards.py) |
 | `file` | Two file artifacts: inline bytes, and a remote URL | [src/handlers/artifacts.py](src/handlers/artifacts.py) |
 | `data` | A structured data artifact instead of prose | [src/handlers/artifacts.py](src/handlers/artifacts.py) |

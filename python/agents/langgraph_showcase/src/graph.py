@@ -34,7 +34,7 @@ from src.nodes import (
     react_node,
     stream_node,
     task_node,
-    typing_node,
+    thinking_node,
 )
 from src.router import handle_card_action, handle_input, route_command
 from src.state import AgentState
@@ -60,7 +60,7 @@ def create_graph() -> StateGraph:
     workflow.add_node("help", menu_node)
     workflow.add_node("stream", stream_node)
     workflow.add_node("llm", llm_node)
-    workflow.add_node("typing", typing_node)
+    workflow.add_node("thinking", thinking_node)
     workflow.add_node("card", card_node)
     workflow.add_node("file", file_node)
     workflow.add_node("data", data_node)
@@ -83,7 +83,7 @@ def create_graph() -> StateGraph:
     workflow.add_edge("help", END)
     workflow.add_edge("stream", END)
     workflow.add_edge("llm", END)
-    workflow.add_edge("typing", END)
+    workflow.add_edge("thinking", END)
     workflow.add_edge("card", END)
     workflow.add_edge("file", END)
     workflow.add_edge("data", END)

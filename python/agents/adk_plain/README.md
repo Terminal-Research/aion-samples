@@ -50,7 +50,7 @@ tests/          the agent run directly, no server needed
   it does not survive a restart.
 - **Output.** The non-partial `Event` the agent yielded became the reply; an `LlmAgent`
   yielding partial events would have streamed its tokens to the client as they arrived.
-- **Everything else.** Cards, artifacts, typing indicators, multi-turn state, reactions,
+- **Everything else.** Cards, artifacts, thoughts, multi-turn state, reactions,
   configuration and custom HTTP routes are one import away — the
   [ADK showcase](../adk_showcase/README.md) demonstrates each of them.
 

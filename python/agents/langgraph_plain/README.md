@@ -49,7 +49,7 @@ tests/          the graph invoked directly, no server needed
   accumulates across turns without a checkpointer in the code.
 - **Output.** The `AIMessage` the node returned became the reply; had the node called a
   model with `astream()`, the tokens would have streamed to the client as they arrived.
-- **Everything else.** Cards, artifacts, typing indicators, human-in-the-loop, reactions,
+- **Everything else.** Cards, artifacts, thoughts, human-in-the-loop, reactions,
   configuration and custom HTTP routes are one import away — the
   [LangGraph showcase](../langgraph_showcase/README.md) demonstrates each of them.
 

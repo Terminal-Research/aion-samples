@@ -30,8 +30,10 @@ async def llm_handler(ctx: AionInvocationContext, prompt: str) -> AsyncGenerator
     ``aion_lite_llm()`` returns ADK's own ``LiteLlm`` pointed at the platform's
     model service, so the agent that answers is an ordinary ``LlmAgent`` with
     the session as its conversation history. Its events are yielded as they
-    are: the partial ones stream the tokens, the final one is the durable
-    reply. Nothing about the answer goes through ``Thread``; only the closing
+    are: the partial ones stream the tokens as a section of the task's
+    ``aion:stream-delta`` artifact, and the final one ends that section
+    without sending the text again; the session keeps it as what the agent
+    said. Nothing about the answer goes through ``Thread``; only the closing
     footer is sent explicitly.
 
     The model is the ``model`` field of the environment's configuration, with

@@ -1,4 +1,4 @@
-"""Message-shaped demonstrations: streaming, typing, reactions, metadata."""
+"""Message-shaped demonstrations: streaming, thinking, reactions, metadata."""
 
 from __future__ import annotations
 
@@ -13,7 +13,9 @@ async def stream_handler(ctx: AionInvocationContext, argument: str) -> None:
     """Stream one reply a few words at a time.
 
     ``thread.reply()`` accepts an async iterator of strings and emits every
-    chunk as a partial ADK event, then one durable event with the whole text.
+    chunk as a partial ADK event, a section of the task's ``aion:stream-delta``
+    artifact, then one complete event that ends the section without sending
+    the text again. The ADK session keeps that event as what the agent said.
     A model-backed agent passes its own token stream here instead.
     """
     thread = Thread.from_context(ctx.aion_runtime_context)
@@ -22,9 +24,10 @@ async def stream_handler(ctx: AionInvocationContext, argument: str) -> None:
         "stream",
         "This sentence reached you in small chunks, the way a model's tokens "
         "arrive — grouped a few words at a time, so a short answer costs a "
-        "handful of events instead of one per word. When the stream ends, "
-        "the SDK emits the whole message once more so the conversation "
-        "history holds a single entry rather than a pile of fragments.",
+        "handful of events instead of one per word. The chunks are the "
+        "task's `aion:stream-delta` artifact, not messages: when the task "
+        "finishes, the server joins them into one text, so the task holds "
+        "the answer once rather than a pile of fragments.",
         "",
         "This is the only command that streams text the agent already had: "
         "every other reply is one `thread.reply(text)` call. The `llm` "
@@ -33,22 +36,24 @@ async def stream_handler(ctx: AionInvocationContext, argument: str) -> None:
     await thread.reply(stream_text(text, delay=TYPEWRITER_DELAY_SECONDS))
 
 
-async def typing_handler(ctx: AionInvocationContext, argument: str) -> None:
-    """Emit ephemeral indicators, then a durable reply.
+async def thinking_handler(ctx: AionInvocationContext, argument: str) -> None:
+    """Share two thoughts, then reply.
 
-    Ephemeral events reach the client but are never persisted in task history.
+    A thought goes to the task's ``aion:thinking-delta`` artifact, one text
+    part per thought. It is not a message, so neither the conversation
+    history nor the ADK session holds it.
     """
     thread = Thread.from_context(ctx.aion_runtime_context)
 
-    await thread.typing("Looking that up…")
-    await thread.typing("Almost there…")
+    await thread.thinking("Looking that up…")
+    await thread.thinking("Almost there…")
 
     await thread.reply(
         with_footer(
-            "typing",
-            "You just saw two typing indicators. They were delivered to you but "
-            "not persisted: ask for `context` afterwards and the message count "
-            "will not have counted them.",
+            "thinking",
+            "You just saw two thoughts. They are kept in the task's "
+            "`aion:thinking-delta` artifact, not as messages: ask for `context` "
+            "afterwards and the event count will not have counted them.",
         )
     )
 

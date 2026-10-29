@@ -23,7 +23,7 @@ aion:
             - "help"
             - "stream"
             - "llm What is the A2A protocol?"
-            - "typing"
+            - "thinking"
             - "card"
             - "file"
             - "data"

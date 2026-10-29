@@ -42,9 +42,9 @@ Send `help` to get the menu — every demonstration is one keyword away from the
 | Send | What happens | Implemented in |
 | --- | --- | --- |
 | `help` | Menu, as plain text | [src/nodes/menu.py](src/nodes/menu.py) |
-| `stream` | One reply arrives a few words at a time, paced, then once as durable history | [src/nodes/messaging.py](src/nodes/messaging.py) |
+| `stream` | The answer arrives a few words at a time, paced, as the task's `aion:stream-delta` artifact | [src/nodes/messaging.py](src/nodes/messaging.py) |
 | `llm {prompt}` | A model answers the prompt; its tokens stream straight out of the model call, no `Thread` involved | [src/nodes/llm.py](src/nodes/llm.py) |
-| `typing` | Two typing indicators that are delivered but never persisted | [src/nodes/messaging.py](src/nodes/messaging.py) |
+| `thinking` | Two thoughts, kept in the task's `aion:thinking-delta` artifact rather than the history | [src/nodes/messaging.py](src/nodes/messaging.py) |
 | `card` | A card composed from typed components, and one referenced by URL | [src/nodes/cards.py](src/nodes/cards.py) |
 | `file` | Two file artifacts: inline bytes, and a remote URL | [src/nodes/artifacts.py](src/nodes/artifacts.py) |
 | `data` | A structured data artifact instead of prose | [src/nodes/artifacts.py](src/nodes/artifacts.py) |

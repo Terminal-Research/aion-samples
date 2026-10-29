@@ -31,15 +31,16 @@ def _inbound_ids(runtime: Runtime[AionRuntimeContext]) -> tuple[str, str]:
 async def progress_node(state: AgentState, *, runtime: Runtime[AionRuntimeContext]) -> dict:
     """Report progress while the work is still running.
 
-    Each step goes out as an ephemeral update, so the caller sees movement
-    without the history filling up with status lines. This is also the shape to
-    watch when you want to observe cancellation: cancel the task from the
-    client while the steps are still arriving.
+    Each step is a thought in the task's ``aion:thinking-delta`` artifact, so
+    the caller sees movement without the history filling up with status
+    lines. This is also the shape to watch when you want to observe
+    cancellation: cancel the task from the client while the steps are still
+    arriving.
     """
     thread = Thread.from_context(runtime.context)
 
     for index, step in enumerate(STEPS, start=1):
-        await thread.typing(f"[{index}/{len(STEPS)}] {step}…")
+        await thread.thinking(f"[{index}/{len(STEPS)}] {step}…")
         await asyncio.sleep(1.0)
 
     reply = await thread.reply(
