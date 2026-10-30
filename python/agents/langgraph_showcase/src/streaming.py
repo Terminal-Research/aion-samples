@@ -1,12 +1,12 @@
 """Text streaming without a language model.
 
 One command streams: `stream` hands ``thread.reply()`` an async iterator built
-here, so the reply arrives in pieces the way a model's tokens do. Every other
-reply is a single string, because chunking text the agent already holds buys
-nothing but events.
+here, so the answer arrives in pieces the way a model's tokens do. Every other
+answer is a single text artifact, because chunking text the agent already holds
+buys nothing but events.
 
-The other streaming reply in this agent is `llm`, and it does not come through
-here: those chunks are the model's own.
+The other streaming answer in this agent is `llm`, and it does not come
+through here: those chunks are the model's own.
 """
 
 from __future__ import annotations

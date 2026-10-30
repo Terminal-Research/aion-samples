@@ -4,6 +4,7 @@ import asyncio
 from types import SimpleNamespace
 
 import pytest
+from a2a.types import Artifact
 from aion.core.a2a.extensions.distribution import (
     Behavior,
     Distribution,
@@ -83,15 +84,18 @@ def model_calls(monkeypatch):
 
 @pytest.fixture
 def replies(monkeypatch):
-    """Capture the text the handler replies with instead of sending it.
+    """Capture the text of every answer the handler sends instead of sending it.
 
     The handler calls ``thread.reply()`` itself, so the fake stands in for the
-    SDK call rather than for a helper around it.
+    SDK call rather than for a helper around it. Every answer of this handler
+    is a text artifact, never a message, and the fake checks that too.
     """
     captured: list[str] = []
 
     async def fake_reply(self, content, **kwargs):
-        captured.append(content)
+        assert isinstance(content, Artifact), f"answer is a {type(content).__name__}, not a text artifact"
+        assert content.name == "text" and len(content.parts) == 1
+        captured.append(content.parts[0].text)
 
     monkeypatch.setattr(Thread, "reply", fake_reply)
     return captured
@@ -104,7 +108,7 @@ def test_model_comes_from_the_environment(model_calls):
 
 
 def test_no_model_means_no_call(model_calls, replies):
-    """There is no default model: without one the reply says how to set it."""
+    """There is no default model: without one the answer says how to set it."""
     asyncio.run(_collect(_ctx(None), "hi"))
     asyncio.run(_collect(_ctx({"greeting": "Hi"}), "hi"))
     assert model_calls == []
@@ -112,10 +116,11 @@ def test_no_model_means_no_call(model_calls, replies):
     assert "Set the `model` field" in replies[1]
 
 
-def test_agent_events_are_passed_through(model_calls):
-    """The LlmAgent's events reach the caller untouched."""
+def test_agent_events_are_passed_through(model_calls, replies):
+    """The LlmAgent's events reach the caller untouched; the footer follows as a text artifact."""
     events = asyncio.run(_collect(_ctx({"model": "some-model"}), "hi"))
     assert [event.content.parts[0].text for event in events] == [ANSWER]
+    assert len(replies) == 1 and "Answered by `some-model`" in replies[0]
 
 
 def test_missing_prompt_asks_for_one(model_calls, replies):
@@ -126,7 +131,7 @@ def test_missing_prompt_asks_for_one(model_calls, replies):
     assert USAGE in replies[0]
 
 
-def test_sdk_refusal_is_explained_in_the_reply(model_calls, replies):
+def test_sdk_refusal_is_explained_in_the_answer(model_calls, replies):
     """An SDK error buried in a client error surfaces with the SDK's own words."""
     refusal = AionAuthenticationError("Unable to obtain an Aion API token.")
     wrapped = ConnectionError("Connection error.")
@@ -160,7 +165,7 @@ class _ServiceError(Exception):
 
 
 def test_service_refusal_is_quoted_with_advice_for_its_code(model_calls, replies):
-    """The service's own words reach the reply, and the advice follows its code."""
+    """The service's own words reach the answer, and the advice follows its code."""
     error = _ServiceError("AgentIdentity d-1 lacks model.execute on Organization o-1.", "model_authorization_denied")
     _FakeAgent.error = error
 
@@ -172,7 +177,7 @@ def test_service_refusal_is_quoted_with_advice_for_its_code(model_calls, replies
 
 
 def test_unknown_code_gets_every_likely_cause(model_calls, replies):
-    """Without a known code the reply still names both fixes and the error table."""
+    """Without a known code the answer still names both fixes and the error table."""
     error = _ServiceError("litellm.APIError: Something new went wrong.", None)
     _FakeAgent.error = error
 

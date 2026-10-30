@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from aion.core.a2a import text_artifact
 from aion.core.runtime import AionRuntimeContext
 from aion.langgraph.authoring.invocation import Thread
 from langchain_core.messages import BaseMessage
@@ -38,6 +39,9 @@ def _resumed_text(value: object) -> str:
 async def ask_node(state: AgentState, *, runtime: Runtime[AionRuntimeContext]) -> dict:
     """Ask the question, and nothing else.
 
+    The question is a message, not an answer: it explains why the task is
+    about to wait for input, and it stays in the conversation history.
+
     The question and the wait deliberately live in two nodes. LangGraph replays
     a node from its first line when the graph resumes, so anything emitted
     before ``interrupt()`` in the same node would be sent twice. Keep side
@@ -58,18 +62,25 @@ async def ask_node(state: AgentState, *, runtime: Runtime[AionRuntimeContext]) -
 
 
 async def ask_wait_node(state: AgentState, *, runtime: Runtime[AionRuntimeContext]) -> dict:
-    """Suspend the run, then acknowledge the answer once it arrives."""
+    """Suspend the run, then answer once the input arrives.
+
+    The interrupt value is the question the client sees on the task's
+    input-required status. The text sent after the resume is the task's
+    answer, so it goes out as a text artifact.
+    """
     answer = _resumed_text(interrupt("Waiting for the environment name"))
 
     thread = Thread.from_context(runtime.context)
 
-    reply = await thread.reply(
-        with_footer(
-            "ask",
-            f'Got it — continuing with "{answer or "no answer given"}".',
-            "",
-            "The run did not restart: it resumed inside the node that was waiting, "
-            "with everything it had already computed still in state.",
+    await thread.reply(
+        text_artifact(
+            with_footer(
+                "ask",
+                f'Got it — continuing with "{answer or "no answer given"}".',
+                "",
+                "The run did not restart: it resumed inside the node that was waiting, "
+                "with everything it had already computed still in state.",
+            )
         )
     )
-    return {"messages": [reply]}
+    return {}

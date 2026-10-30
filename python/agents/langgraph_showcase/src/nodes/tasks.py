@@ -6,7 +6,7 @@ import asyncio
 import uuid
 
 from a2a.types import Artifact, Message as A2AMessage, Part, Role, Task, TaskState, TaskStatus
-from aion.core.a2a import A2AOutbox
+from aion.core.a2a import A2AOutbox, text_artifact
 from aion.core.runtime import AionRuntimeContext
 from aion.langgraph.authoring.invocation import Thread
 from langgraph.runtime import Runtime
@@ -15,6 +15,8 @@ from src.replies import with_footer
 from src.state import AgentState
 
 STEPS = ("Fetching input", "Crunching numbers", "Writing the result")
+STEP_SECONDS = 1.0
+"""How long each step of `progress` takes, so its progress is visible."""
 
 
 def _inbound_ids(runtime: Runtime[AionRuntimeContext]) -> tuple[str, str]:
@@ -33,26 +35,29 @@ async def progress_node(state: AgentState, *, runtime: Runtime[AionRuntimeContex
 
     Each step is a thought in the task's ``aion:thinking-delta`` artifact, so
     the caller sees movement without the history filling up with status
-    lines. This is also the shape to watch when you want to observe
-    cancellation: cancel the task from the client while the steps are still
-    arriving.
+    lines. The text sent once the work is done is the task's answer, so it
+    goes out as a text artifact. This is also the shape to watch when you
+    want to observe cancellation: cancel the task from the client while the
+    steps are still arriving.
     """
     thread = Thread.from_context(runtime.context)
 
     for index, step in enumerate(STEPS, start=1):
         await thread.thinking(f"[{index}/{len(STEPS)}] {step}…")
-        await asyncio.sleep(1.0)
+        await asyncio.sleep(STEP_SECONDS)
 
-    reply = await thread.reply(
-        with_footer(
-            "progress",
-            f"Finished all {len(STEPS)} steps.",
-            "",
-            "To see cancellation, send `progress` again and cancel the task while "
-            "the steps are still coming in.",
+    await thread.reply(
+        text_artifact(
+            with_footer(
+                "progress",
+                f"Finished all {len(STEPS)} steps.",
+                "",
+                "To see cancellation, send `progress` again and cancel the task while "
+                "the steps are still coming in.",
+            )
         )
     )
-    return {"messages": [reply]}
+    return {}
 
 
 async def task_node(state: AgentState, *, runtime: Runtime[AionRuntimeContext]) -> dict:
@@ -60,7 +65,8 @@ async def task_node(state: AgentState, *, runtime: Runtime[AionRuntimeContext]) 
 
     Everything above this uses the thread helpers and lets the server assemble
     the response. When you need full control — your own history, artifacts and
-    metadata on the task — put a Task in the outbox.
+    metadata on the task — put a Task in the outbox. The Task is the
+    demonstration; the explanation beside it goes out as a text artifact.
     """
     thread = Thread.from_context(runtime.context)
     task_id, context_id = _inbound_ids(runtime)
@@ -86,21 +92,24 @@ async def task_node(state: AgentState, *, runtime: Runtime[AionRuntimeContext]) 
         metadata={"built_by": "showcase"},
     )
 
-    reply = await thread.reply(
-        with_footer(
-            "task",
-            "An explicit A2A Task is on its way out, carrying its own history, one "
-            "artifact and custom metadata.",
+    await thread.reply(
+        text_artifact(
+            with_footer(
+                "task",
+                "An explicit A2A Task is on its way out, carrying its own history, one "
+                "artifact and custom metadata.",
+            )
         )
     )
-    return {"messages": [reply], "a2a_outbox": A2AOutbox(task=task)}
+    return {"a2a_outbox": A2AOutbox(task=task)}
 
 
 async def message_node(state: AgentState, *, runtime: Runtime[AionRuntimeContext]) -> dict:
     """Answer with a bare A2A Message.
 
     A Message is the right response when there is no work to track — no task
-    lifecycle, just a reply bound to the same context.
+    lifecycle, just a reply bound to the same context. The Message is the
+    demonstration; the explanation beside it goes out as a text artifact.
     """
     thread = Thread.from_context(runtime.context)
     task_id, context_id = _inbound_ids(runtime)
@@ -113,14 +122,16 @@ async def message_node(state: AgentState, *, runtime: Runtime[AionRuntimeContext
         context_id=context_id,
     )
 
-    reply = await thread.reply(
-        with_footer(
-            "message",
-            "An explicit A2A Message is on its way out — same context, no task "
-            "lifecycle attached.",
+    await thread.reply(
+        text_artifact(
+            with_footer(
+                "message",
+                "An explicit A2A Message is on its way out — same context, no task "
+                "lifecycle attached.",
+            )
         )
     )
-    return {"messages": [reply], "a2a_outbox": A2AOutbox(message=outbound)}
+    return {"a2a_outbox": A2AOutbox(message=outbound)}
 
 
 async def fail_node(state: AgentState, *, runtime: Runtime[AionRuntimeContext]) -> dict:
@@ -128,7 +139,8 @@ async def fail_node(state: AgentState, *, runtime: Runtime[AionRuntimeContext]) 
 
     Failure is part of the contract: the caller needs a terminal state it can
     act on, not a silent stop. Returning a failed Task says what went wrong and
-    ends the task cleanly.
+    ends the task cleanly. A failed task has no result, so the explanation is a
+    message, not an artifact.
     """
     thread = Thread.from_context(runtime.context)
     task_id, context_id = _inbound_ids(runtime)

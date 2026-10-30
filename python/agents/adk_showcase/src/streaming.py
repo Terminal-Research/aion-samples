@@ -1,11 +1,11 @@
 """Text streaming without a language model.
 
 One command streams: `stream` hands ``thread.reply()`` an async iterator built
-here, so the reply arrives in pieces the way a model's tokens do. Every other
-reply is a single string, because chunking text the agent already holds buys
-nothing but events.
+here, so the answer arrives in pieces the way a model's tokens do. Every other
+answer is a single text artifact, because chunking text the agent already
+holds buys nothing but events.
 
-The other streaming reply in this agent is `llm`, and it does not come through
+The other streamed answer in this agent is `llm`, and it does not come through
 here: those chunks are the partial events of an ``LlmAgent``.
 """
 
@@ -15,7 +15,7 @@ import asyncio
 from collections.abc import AsyncIterator
 
 WORDS_PER_CHUNK = 10
-"""Words per streamed chunk. Large enough that a short reply is a handful of
+"""Words per streamed chunk. Large enough that a short answer is a handful of
 events rather than one per word, small enough that the text still visibly
 arrives in pieces."""
 

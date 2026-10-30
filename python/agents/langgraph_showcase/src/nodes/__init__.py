@@ -1,6 +1,6 @@
 """Command nodes, grouped by the kind of platform behaviour they demonstrate."""
 
-from src.nodes.artifacts import composite_node, data_node, file_node
+from src.nodes.artifacts import artifact_node, composite_node, data_node, file_node
 from src.nodes.cards import card_node
 from src.nodes.config import config_node
 from src.nodes.context import context_node
@@ -12,6 +12,7 @@ from src.nodes.messaging import metadata_node, react_node, stream_node, thinking
 from src.nodes.tasks import fail_node, message_node, progress_node, task_node
 
 __all__ = [
+    "artifact_node",
     "ask_node",
     "ask_wait_node",
     "card_node",

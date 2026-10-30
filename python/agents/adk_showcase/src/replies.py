@@ -1,4 +1,4 @@
-"""The footer every reply ends with."""
+"""The footer every answer ends with."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from src.commands import COMMANDS_BY_KEY
 
 
 def with_footer(command_key: str, *lines: str) -> str:
-    """Join the reply lines and append the command's source footer.
+    """Join the answer lines and append the command's source footer.
 
     The footer is what turns the agent into a browsable index of the platform:
     every answer states which SDK call produced it and where that call lives.
@@ -15,9 +15,9 @@ def with_footer(command_key: str, *lines: str) -> str:
 
     Args:
         command_key: Key of the command being demonstrated.
-        *lines: Body lines of the reply.
+        *lines: Body lines of the answer.
 
     Returns:
-        The reply text, footer included.
+        The answer text, footer included.
     """
     return "\n".join([*lines, "", COMMANDS_BY_KEY[command_key].footer()])

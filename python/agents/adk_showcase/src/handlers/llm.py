@@ -8,6 +8,7 @@ from collections.abc import AsyncGenerator
 from aion.adk.authoring.invocation import AionInvocationContext, Thread
 from aion.adk.authoring.models import aion_lite_llm
 from aion.api.exceptions import AionAuthenticationError
+from aion.core.a2a import text_artifact
 from google.adk.agents import LlmAgent
 from google.adk.events import Event
 
@@ -34,7 +35,7 @@ async def llm_handler(ctx: AionInvocationContext, prompt: str) -> AsyncGenerator
     ``aion:stream-delta`` artifact, and the final one ends that section
     without sending the text again; the session keeps it as what the agent
     said. Nothing about the answer goes through ``Thread``; only the closing
-    footer is sent explicitly.
+    footer is sent explicitly, as a text artifact beside the streamed answer.
 
     The model is the ``model`` field of the environment's configuration, with
     no default in the code or in aion.yaml: whoever deploys the agent picks
@@ -43,18 +44,19 @@ async def llm_handler(ctx: AionInvocationContext, prompt: str) -> AsyncGenerator
     The model service runs work for a principal, which arrives with an
     invocation the platform delivers. A direct local call carries none, so
     the SDK refuses the call before sending it. Every failure is reported in
-    the reply rather than raised, because a broken model is not a broken task.
+    a text artifact rather than raised, because a broken model is not a
+    broken task; so are a missing prompt and a missing model.
     """
     thread = Thread.from_context(ctx.aion_runtime_context)
 
     if not prompt.strip():
-        await thread.reply(with_footer("llm", USAGE))
+        await thread.reply(text_artifact(with_footer("llm", USAGE)))
         return
 
     environment = ctx.aion_runtime_context.get_environment()
     model = environment.get_configuration_variable("model") if environment else None
     if not model:
-        await thread.reply(with_footer("llm", *_no_model(environment is not None)))
+        await thread.reply(text_artifact(with_footer("llm", *_no_model(environment is not None))))
         return
     agent = LlmAgent(name="llm", model=aion_lite_llm(model), instruction=INSTRUCTION)
 
@@ -71,16 +73,18 @@ async def llm_handler(ctx: AionInvocationContext, prompt: str) -> AsyncGenerator
             refusal or exc,
             exc_info=refusal is None,
         )
-        await thread.reply(with_footer("llm", *_explain(model, exc, refusal)))
+        await thread.reply(text_artifact(with_footer("llm", *_explain(model, exc, refusal))))
         return
 
     await thread.reply(
-        with_footer("llm", f"Answered by `{model}`, the `model` field of this environment's configuration.")
+        text_artifact(
+            with_footer("llm", f"Answered by `{model}`, the `model` field of this environment's configuration.")
+        )
     )
 
 
 def _no_model(has_environment: bool) -> list[str]:
-    """Reply lines for a turn that selects no model; no call is made for it."""
+    """Answer lines for a turn that selects no model; no call is made for it."""
     if not has_environment:
         return [
             "No model call was made: this turn carries no environment, so no model is selected.",
@@ -144,7 +148,7 @@ ADVICE = {
 
 
 def _explain(model: str, exc: BaseException, refusal: AionAuthenticationError | None) -> list[str]:
-    """Turn a failed model call into reply lines.
+    """Turn a failed model call into answer lines.
 
     Whoever refused the call explains it best, so its words are shown verbatim:
     the SDK's, when it refused before sending, or the model service's. The

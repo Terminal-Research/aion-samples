@@ -7,11 +7,17 @@ produced what you just saw and which file it lives in. That call is written in t
 the footer names — no reply helper stands between the two, so every demonstration reads
 as the SDK code you would write yourself.
 
-Every reply is text the agent already knows, sent with `thread.reply(text)`, so what you
-are looking at is platform behaviour rather than model output. Two commands stream:
-`stream`, which paces its own chunks because that is what it demonstrates, and `llm`,
-where a model from the platform's catalog answers and its tokens are the chunks. `card`
-is the one command that sends a rich card; everything else is plain text.
+Every answer is text the agent already knows, so what you are looking at is platform
+behaviour rather than model output. An answer is the task's result, so it is sent as an
+artifact, `thread.reply(text_artifact(text))`, not as a message: the task holds it among
+its artifacts, and the server copies no `aion:assistant-answer` from a message for it.
+Messages appear only where a command is about one — the question `ask` leaves open and
+the message `metadata` decorates — in the explicit A2A objects `task`, `message` and
+`fail` place in the outbox, and in the explanation `fail` sends: a failed task has no
+result. Two commands stream: `stream`, which paces its own chunks
+because that is what it demonstrates, and `llm`, where a model from the platform's
+catalog answers and its tokens are the chunks; both answers are the task's
+`aion:stream-delta` artifact. `card` is the one command that sends a rich card.
 
 ## Run it
 
@@ -25,7 +31,7 @@ local call. `llm` calls the platform's model service, which needs three things �
 `AION_CLIENT_ID` / `AION_CLIENT_SECRET` in `.env` (copy `.env.example`), a turn the
 platform delivered, because the model service runs work for the environment's identity
 and a direct local call carries none, and a model chosen in the `model` field of the
-environment's configuration. Until then, `llm` explains what is missing in its reply
+environment's configuration. Until then, `llm` explains what is missing in its answer
 instead of failing.
 
 Talk to it from the terminal chat client:
@@ -41,24 +47,29 @@ Send `help` to get the menu — every demonstration is one keyword away from the
 
 | Send | What happens | Implemented in |
 | --- | --- | --- |
-| `help` | Menu, as plain text | [src/handlers/menu.py](src/handlers/menu.py) |
+| `help` | Menu, as a text artifact | [src/handlers/menu.py](src/handlers/menu.py) |
 | `stream` | The answer arrives a few words at a time, paced, as the task's `aion:stream-delta` artifact | [src/handlers/messaging.py](src/handlers/messaging.py) |
 | `llm {prompt}` | An `LlmAgent` on the platform's model answers the prompt; its events stream the tokens, no `Thread` involved | [src/handlers/llm.py](src/handlers/llm.py) |
 | `thinking` | Two thoughts, kept in the task's `aion:thinking-delta` artifact rather than the history | [src/handlers/messaging.py](src/handlers/messaging.py) |
 | `card` | A card composed from typed components, and one referenced by URL | [src/handlers/cards.py](src/handlers/cards.py) |
+| `artifact` | An artifact built by hand — its own id, a name, one text part and custom metadata | [src/handlers/artifacts.py](src/handlers/artifacts.py) |
 | `file` | Two file artifacts: inline bytes, and a remote URL | [src/handlers/artifacts.py](src/handlers/artifacts.py) |
 | `data` | A structured data artifact instead of prose | [src/handlers/artifacts.py](src/handlers/artifacts.py) |
 | `composite` | The same artifact saved twice, so the store keeps two versions | [src/handlers/artifacts.py](src/handlers/artifacts.py) |
-| `ask` | The agent asks for input and picks it up on your next turn | [src/handlers/hitl.py](src/handlers/hitl.py) |
+| `ask` | The agent asks for input in a message and picks it up on your next turn | [src/handlers/hitl.py](src/handlers/hitl.py) |
 | `react` | A reaction is added to your message, then removed | [src/handlers/messaging.py](src/handlers/messaging.py) |
 | `metadata` | Custom metadata attached to a message and to an artifact | [src/handlers/messaging.py](src/handlers/messaging.py) |
 | `progress` | Progress reported while work is still running | [src/handlers/tasks.py](src/handlers/tasks.py) |
 | `task` | An explicit A2A Task, built by the agent, placed in the outbox | [src/handlers/tasks.py](src/handlers/tasks.py) |
 | `message` | An explicit A2A Message placed in the outbox | [src/handlers/tasks.py](src/handlers/tasks.py) |
-| `fail` | The task ends in the failed state, on purpose | [src/handlers/tasks.py](src/handlers/tasks.py) |
+| `fail` | The task ends in the failed state, on purpose, with its reason in a message | [src/handlers/tasks.py](src/handlers/tasks.py) |
 | `context` | What the agent knows about this conversation and its caller | [src/handlers/context.py](src/handlers/context.py) |
 | `config` | Configuration values the control plane passed to this deployment | [src/handlers/config.py](src/handlers/config.py) |
 | `http` | The custom HTTP routes this agent serves next to A2A | [src/api.py](src/api.py) |
+
+Every command except `stream` ends with a text artifact naming the SDK call it
+demonstrates and the file it lives in; `stream` streams that footer with the rest of its
+answer.
 
 Keywords are case-insensitive and tolerate a leading verb, so `card`, `Show me the card`
 and `/card` all select the same demonstration. Anything unrecognized returns the menu.
@@ -71,7 +82,7 @@ is handled by the same handler as typing that keyword.
 src/
   commands.py   registry — every demonstration is one entry here
   agent.py      BaseAgent subclass: keyword (or card button) -> handler
-  replies.py    with_footer(): builds the reply text, sends nothing
+  replies.py    with_footer(): builds the answer text, sends nothing
   streaming.py  the chunked iterator the `stream` command hands to reply()
   api.py        custom HTTP routes, registered with the server
   handlers/     the demonstrations, grouped by kind
@@ -91,11 +102,24 @@ outbox is an async generator of ADK events.
 
 ## Notes on the platform
 
+- **An answer is an artifact.** A client reads what a task produced from its artifacts,
+  so every answer here is one: `text_artifact(text)` builds an artifact with one text
+  part, a fresh id and the name `text`, and `artifact` shows the same thing built by
+  hand. A task that has an artifact of its own gets no `aion:assistant-answer`; one
+  that only sent messages would get its last message copied into one. Saving the name
+  `text` again in the same conversation stores the next version, so each answer's
+  `metadata.version` counts up from 0.
+- **An artifact's metadata comes with `thread.reply()`.** The ADK artifact service
+  stores the part alone; the artifact's id and name travel with the event that announces
+  it, and its custom metadata is the `metadata` passed to `thread.reply()`.
 - **A turn that asks a question ends there.** An ADK agent answers and returns; it does
-  not park mid-run. Session state written through `EventActions(state_delta=...)` carries
-  an open question into the next turn — but the server only uses
-  `DatabaseSessionService` when a database is configured, otherwise it falls back to an
-  in-memory service and the question is lost when the process restarts.
+  not park mid-run, so the task of `ask` completes rather than waiting in
+  `INPUT_REQUIRED`: the question is a message in its history, the explanation its
+  artifact, and the answer arrives as a new task in the same conversation. Session state
+  written through `EventActions(state_delta=...)` carries the open question into that
+  turn — but the server only uses `DatabaseSessionService` when a database is
+  configured, otherwise it falls back to an in-memory service and the question is lost
+  when the process restarts.
 - **Artifacts are stored before they are emitted.** The artifact service owns storage, so
   saving the same name again stores a new version rather than extending the previous one,
   and without a configured artifact service the emission is skipped with a warning.
@@ -109,14 +133,16 @@ outbox is an async generator of ADK events.
 - **A model call needs a principal.** The model service runs work for the environment's
   Daemon Identity, which arrives with a platform-delivered invocation. A direct local
   call has none, so the SDK refuses the call before sending it; `llm` shows that
-  refusal in its reply.
+  refusal in its answer.
 - **The Daemon Identity needs `model.execute`.** Its role must allow running models in
   the organization (of the agent roles, Organization Agent does). When the model service
   refuses a call, `llm` quotes the service's reason and, by its error code, says what to
   change; the codes are listed under Troubleshoot a request in the model service docs.
 - **An `LlmAgent` sees the session.** `llm` runs a child `LlmAgent` on the current
   invocation context, so the model's conversation history is the ADK session — every
-  earlier turn in this conversation, including the showcase's own replies.
+  earlier user turn in this conversation and every message or streamed answer the agent
+  sent, but not its text artifacts: the session records an artifact's version, and its
+  text stays in the artifact service.
 - **Secret configuration arrives in plaintext.** `config` echoes the values it receives
   because this sample declares none that are secret. Do not echo real ones.
 - **Metadata keys under `aion:` are reserved.** Anything else you attach travels untouched.
@@ -130,6 +156,8 @@ poetry run pytest
 `tests/test_commands.py` covers parsing and the registry with no SDK needed, and checks
 that the call named in each footer really is written in the file the footer points at;
 `tests/test_agent.py` asserts every command has a handler with the one dispatch
-signature, and that dispatch resolves;
+signature, that dispatch resolves, and runs every handler to check what it sends: a text
+artifact as the answer, a message only for `ask`'s question and `metadata`'s own
+message, and no text event beside them;
 `tests/test_llm.py` runs the `llm` handler against a faked agent and checks where the
-model id comes from and how a failed call is reported.
+model id comes from and how a failed call is reported, in a text artifact.

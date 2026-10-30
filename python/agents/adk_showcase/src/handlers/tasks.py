@@ -8,7 +8,7 @@ from collections.abc import AsyncGenerator
 
 from a2a.types import Artifact, Message as A2AMessage, Part, Role, Task, TaskState, TaskStatus
 from aion.adk.authoring.invocation import AionInvocationContext, Thread
-from aion.core.a2a import A2AOutbox
+from aion.core.a2a import A2AOutbox, text_artifact
 from google.adk.events import Event
 from google.adk.events.event_actions import EventActions
 
@@ -34,9 +34,10 @@ async def progress_handler(ctx: AionInvocationContext, argument: str) -> None:
 
     Each step is a thought in the task's ``aion:thinking-delta`` artifact, so
     the caller sees movement without the history filling up with status
-    lines. This is also the shape to watch when you want to observe
-    cancellation: cancel the task from the client while the steps are still
-    arriving.
+    lines. What the work produced is the task's result, a text artifact sent
+    once the steps are done. This is also the shape to watch when you want to
+    observe cancellation: cancel the task from the client while the steps are
+    still arriving.
     """
     thread = Thread.from_context(ctx.aion_runtime_context)
 
@@ -45,12 +46,14 @@ async def progress_handler(ctx: AionInvocationContext, argument: str) -> None:
         await asyncio.sleep(1.0)
 
     await thread.reply(
-        with_footer(
-            "progress",
-            f"Finished all {len(STEPS)} steps.",
-            "",
-            "To see cancellation, send `progress` again and cancel the task while "
-            "the steps are still coming in.",
+        text_artifact(
+            with_footer(
+                "progress",
+                f"Finished all {len(STEPS)} steps.",
+                "",
+                "To see cancellation, send `progress` again and cancel the task while "
+                "the steps are still coming in.",
+            )
         )
     )
 
@@ -60,7 +63,8 @@ async def task_handler(ctx: AionInvocationContext, argument: str) -> AsyncGenera
 
     Everything above this uses the thread helpers and lets the server assemble
     the response. When you need full control — your own history, artifacts and
-    metadata on the task — put a Task in the outbox.
+    metadata on the task — put a Task in the outbox. The Task is what this
+    command demonstrates; the explanation sent beside it is a text artifact.
     """
     thread = Thread.from_context(ctx.aion_runtime_context)
     task_id, context_id = _inbound_ids(ctx)
@@ -87,10 +91,12 @@ async def task_handler(ctx: AionInvocationContext, argument: str) -> AsyncGenera
     )
 
     await thread.reply(
-        with_footer(
-            "task",
-            "An explicit A2A Task is on its way out, carrying its own history, one "
-            "artifact and custom metadata.",
+        text_artifact(
+            with_footer(
+                "task",
+                "An explicit A2A Task is on its way out, carrying its own history, one "
+                "artifact and custom metadata.",
+            )
         )
     )
 
@@ -108,7 +114,9 @@ async def message_handler(ctx: AionInvocationContext, argument: str) -> AsyncGen
     """Answer with a bare A2A Message.
 
     A Message is the right response when there is no work to track — no task
-    lifecycle, just a reply bound to the same context.
+    lifecycle, just a reply bound to the same context. The Message is what
+    this command demonstrates; the explanation sent beside it is a text
+    artifact.
     """
     thread = Thread.from_context(ctx.aion_runtime_context)
     task_id, context_id = _inbound_ids(ctx)
@@ -122,10 +130,12 @@ async def message_handler(ctx: AionInvocationContext, argument: str) -> AsyncGen
     )
 
     await thread.reply(
-        with_footer(
-            "message",
-            "An explicit A2A Message is on its way out — same context, no task "
-            "lifecycle attached.",
+        text_artifact(
+            with_footer(
+                "message",
+                "An explicit A2A Message is on its way out — same context, no task "
+                "lifecycle attached.",
+            )
         )
     )
 
@@ -143,7 +153,9 @@ async def fail_handler(ctx: AionInvocationContext, argument: str) -> AsyncGenera
     """Finish the task in the failed state, on purpose.
 
     Failure is part of the contract: the caller needs a terminal state it can
-    act on, not a silent stop.
+    act on, not a silent stop. A failed task has no result, so nothing here is
+    an artifact: the reason is a message in the failed Task's history, and the
+    explanation of the demonstration is a message too.
     """
     thread = Thread.from_context(ctx.aion_runtime_context)
     task_id, context_id = _inbound_ids(ctx)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from aion.core.a2a import text_artifact
 from aion.core.runtime import AionRuntimeContext
 from aion.langgraph.authoring.invocation import Thread
 from langgraph.runtime import Runtime
@@ -23,29 +24,33 @@ async def config_node(state: AgentState, *, runtime: Runtime[AionRuntimeContext]
     environment = runtime.context.get_environment()
 
     if environment is None:
-        reply = await thread.reply(
-            with_footer(
-                "config",
-                "This turn carries no environment. Configuration reaches an agent "
-                "with the invocation, not through the process environment, and a "
-                "direct local A2A call carries none. Deploy the agent and set "
-                "`greeting` on the environment to see the values here.",
+        await thread.reply(
+            text_artifact(
+                with_footer(
+                    "config",
+                    "This turn carries no environment. Configuration reaches an agent "
+                    "with the invocation, not through the process environment, and a "
+                    "direct local A2A call carries none. Deploy the agent and set "
+                    "`greeting` on the environment to see the values here.",
+                )
             )
         )
-        return {"messages": [reply]}
+        return {}
 
     variables = environment.configuration_variables or {}
     lines = [f"  {key} = {value}" for key, value in sorted(variables.items())] or ["  (none set)"]
 
-    reply = await thread.reply(
-        with_footer(
-            "config",
-            f"Environment `{environment.name}` (project {environment.project_id}):",
-            *lines,
-            "",
-            "These come from the `configuration:` block in aion.yaml, filled in per "
-            "environment. Secret-typed values arrive here in plaintext — never echo "
-            "those back the way this sample echoes the rest.",
+    await thread.reply(
+        text_artifact(
+            with_footer(
+                "config",
+                f"Environment `{environment.name}` (project {environment.project_id}):",
+                *lines,
+                "",
+                "These come from the `configuration:` block in aion.yaml, filled in per "
+                "environment. Secret-typed values arrive here in plaintext — never echo "
+                "those back the way this sample echoes the rest.",
+            )
         )
     )
-    return {"messages": [reply]}
+    return {}

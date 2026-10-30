@@ -8,7 +8,8 @@ aion:
         streaming, a model answer through the platform's model service, cards,
         artifacts, multi-turn state, reactions, explicit A2A responses,
         runtime context, deployment configuration and custom HTTP routes.
-        Every other response is written by the agent itself.
+        Every other answer is written by the agent itself and is the task's
+        result, a text artifact.
       version: "1.0.0"
       input_modes: [ "text" ]
       output_modes: [ "text" ]
@@ -16,8 +17,9 @@ aion:
         - id: "feature_showcase"
           name: "Feature Showcase"
           description: >-
-            Each keyword runs one demonstration and replies with the SDK call
-            that produced it. Send "help" for the menu.
+            Each keyword runs one demonstration and answers, as a text
+            artifact, with the SDK call that produced it. Send "help" for the
+            menu.
           tags: [ "showcase", "streaming", "artifacts", "cards", "a2a", "adk" ]
           examples:
             - "help"
@@ -25,6 +27,7 @@ aion:
             - "llm What is the A2A protocol?"
             - "thinking"
             - "card"
+            - "artifact"
             - "file"
             - "data"
             - "composite"

@@ -16,6 +16,7 @@ from langgraph.graph import StateGraph
 
 import src.api  # registers the /showcase routes with the server
 from src.nodes import (
+    artifact_node,
     ask_node,
     ask_wait_node,
     card_node,
@@ -62,6 +63,7 @@ def create_graph() -> StateGraph:
     workflow.add_node("llm", llm_node)
     workflow.add_node("thinking", thinking_node)
     workflow.add_node("card", card_node)
+    workflow.add_node("artifact", artifact_node)
     workflow.add_node("file", file_node)
     workflow.add_node("data", data_node)
     workflow.add_node("composite", composite_node)
@@ -85,6 +87,7 @@ def create_graph() -> StateGraph:
     workflow.add_edge("llm", END)
     workflow.add_edge("thinking", END)
     workflow.add_edge("card", END)
+    workflow.add_edge("artifact", END)
     workflow.add_edge("file", END)
     workflow.add_edge("data", END)
     workflow.add_edge("composite", END)

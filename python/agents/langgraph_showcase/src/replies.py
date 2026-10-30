@@ -10,8 +10,9 @@ def with_footer(command_key: str, *lines: str) -> str:
 
     The footer is what turns the agent into a browsable index of the platform:
     every answer states which SDK call produced it and where that call lives.
-    Sending the text is left to the caller, so the SDK call the footer names is
-    the one written in the node itself.
+    Sending the text is left to the caller — as a text artifact when it is the
+    task's answer, as a message when it is one — so the SDK call the footer
+    names is the one written in the node itself.
 
     Args:
         command_key: Key of the command being demonstrated.

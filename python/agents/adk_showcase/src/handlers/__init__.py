@@ -1,6 +1,6 @@
 """Command handlers, grouped by the kind of platform behaviour they demonstrate."""
 
-from src.handlers.artifacts import composite_handler, data_handler, file_handler
+from src.handlers.artifacts import artifact_handler, composite_handler, data_handler, file_handler
 from src.handlers.cards import card_handler
 from src.handlers.config import config_handler
 from src.handlers.context import context_handler
@@ -13,6 +13,7 @@ from src.handlers.tasks import fail_handler, message_handler, progress_handler, 
 
 __all__ = [
     "answer_handler",
+    "artifact_handler",
     "ask_handler",
     "card_handler",
     "composite_handler",
@@ -30,5 +31,6 @@ __all__ = [
     "progress_handler",
     "react_handler",
     "stream_handler",
+    "task_handler",
     "thinking_handler",
 ]

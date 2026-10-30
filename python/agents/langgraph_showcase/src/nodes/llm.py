@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 
 from aion.api.exceptions import AionAuthenticationError
+from aion.core.a2a import text_artifact
 from aion.core.runtime import AionRuntimeContext
 from aion.langgraph.authoring.invocation import Thread
 from aion.langgraph.authoring.models import aion_chat_openai
@@ -34,7 +35,7 @@ async def llm_node(state: AgentState, *, runtime: Runtime[AionRuntimeContext]) -
     chunks from ``astream()`` reach the client as they arrive, as a section
     of the task's ``aion:stream-delta`` artifact. That artifact is the
     answer: the ``AIMessage`` returned into state is not sent again. Only
-    the closing footer is sent explicitly.
+    the closing footer is sent explicitly, as a text artifact.
 
     The model is the ``model`` field of the environment's configuration, with
     no default in the code or in aion.yaml: whoever deploys the agent picks
@@ -43,20 +44,21 @@ async def llm_node(state: AgentState, *, runtime: Runtime[AionRuntimeContext]) -
     The model service runs work for a principal, which arrives with an
     invocation the platform delivers. A direct local call carries none, so
     the SDK refuses the call before sending it. Every failure is reported in
-    the reply rather than raised, because a broken model is not a broken task.
+    a text artifact rather than raised, because a broken model is not a
+    broken task.
     """
     thread = Thread.from_context(runtime.context)
 
     prompt = (state.get("argument") or "").strip()
     if not prompt:
-        reply = await thread.reply(with_footer("llm", USAGE))
-        return {"messages": [reply]}
+        await thread.reply(text_artifact(with_footer("llm", USAGE)))
+        return {}
 
     environment = runtime.context.get_environment()
     model = environment.get_configuration_variable("model") if environment else None
     if not model:
-        reply = await thread.reply(with_footer("llm", *_no_model(environment is not None)))
-        return {"messages": [reply]}
+        await thread.reply(text_artifact(with_footer("llm", *_no_model(environment is not None))))
+        return {}
     chat = aion_chat_openai(model)
 
     try:
@@ -74,17 +76,19 @@ async def llm_node(state: AgentState, *, runtime: Runtime[AionRuntimeContext]) -
             refusal or exc,
             exc_info=refusal is None,
         )
-        reply = await thread.reply(with_footer("llm", *_explain(model, exc, refusal)))
-        return {"messages": [reply]}
+        await thread.reply(text_artifact(with_footer("llm", *_explain(model, exc, refusal))))
+        return {}
 
     answer = "".join(_text(chunk.content) for chunk in chunks)
-    footer_reply = await thread.reply(
-        with_footer("llm", f"Answered by `{model}`, the `model` field of this environment's configuration.")
+    await thread.reply(
+        text_artifact(
+            with_footer("llm", f"Answered by `{model}`, the `model` field of this environment's configuration.")
+        )
     )
     # Keep the id the chunks streamed under: LangGraph recognises the message as
     # the one already sent and does not send it again as a new one.
     streamed_id = chunks[0].id if chunks else None
-    return {"messages": [AIMessage(content=answer, id=streamed_id), footer_reply]}
+    return {"messages": [AIMessage(content=answer, id=streamed_id)]}
 
 
 def _text(content: object) -> str:
@@ -99,7 +103,7 @@ def _text(content: object) -> str:
 
 
 def _no_model(has_environment: bool) -> list[str]:
-    """Reply lines for a turn that selects no model; no call is made for it."""
+    """Answer lines for a turn that selects no model; no call is made for it."""
     if not has_environment:
         return [
             "No model call was made: this turn carries no environment, so no model is selected.",
@@ -163,7 +167,7 @@ ADVICE = {
 
 
 def _explain(model: str, exc: BaseException, refusal: AionAuthenticationError | None) -> list[str]:
-    """Turn a failed model call into reply lines.
+    """Turn a failed model call into answer lines.
 
     Whoever refused the call explains it best, so its words are shown verbatim:
     the SDK's, when it refused before sending, or the model service's. The

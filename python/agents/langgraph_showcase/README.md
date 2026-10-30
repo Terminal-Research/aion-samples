@@ -7,11 +7,25 @@ produced what you just saw and which file it lives in. That call is written in t
 the footer names — no reply helper stands between the two, so every demonstration reads
 as the SDK code you would write yourself.
 
-Every reply is text the agent already knows, sent with `thread.reply(text)`, so what you
-are looking at is platform behaviour rather than model output. Two commands stream:
-`stream`, which paces its own chunks because that is what it demonstrates, and `llm`,
-where a model from the platform's catalog answers and its tokens are the chunks. `card`
-is the one command that sends a rich card; everything else is plain text.
+Every answer is text the agent already knows, so what you are looking at is platform
+behaviour rather than model output. An answer is the task's result, not a message: it is
+sent as a text artifact with `thread.reply(text_artifact(text))`, and nothing beside it
+repeats the text as a message. Two commands stream: `stream`, which paces its own chunks
+because that is what it demonstrates, and `llm`, where a model from the platform's
+catalog answers and its tokens are the chunks; both answer in the task's
+`aion:stream-delta` artifact. `card` is the one command that sends a rich card;
+everything else is plain text.
+
+A few texts stay messages, because they are not the task's result:
+
+- the question `ask` asks before the task waits in the input-required state;
+- the explanation `fail` sends with the failed task;
+- the messages that are themselves the demonstration — the message `metadata` attaches
+  metadata to, and the explicit A2A Message and Task that `message` and `task` place in
+  the outbox.
+
+Progress (`progress`) and thoughts (`thinking`) go to the task's `aion:thinking-delta`
+artifact, which is neither a message nor a result.
 
 ## Run it
 
@@ -41,21 +55,22 @@ Send `help` to get the menu — every demonstration is one keyword away from the
 
 | Send | What happens | Implemented in |
 | --- | --- | --- |
-| `help` | Menu, as plain text | [src/nodes/menu.py](src/nodes/menu.py) |
+| `help` | Menu, as a text artifact | [src/nodes/menu.py](src/nodes/menu.py) |
 | `stream` | The answer arrives a few words at a time, paced, as the task's `aion:stream-delta` artifact | [src/nodes/messaging.py](src/nodes/messaging.py) |
 | `llm {prompt}` | A model answers the prompt; its tokens stream straight out of the model call, no `Thread` involved | [src/nodes/llm.py](src/nodes/llm.py) |
 | `thinking` | Two thoughts, kept in the task's `aion:thinking-delta` artifact rather than the history | [src/nodes/messaging.py](src/nodes/messaging.py) |
 | `card` | A card composed from typed components, and one referenced by URL | [src/nodes/cards.py](src/nodes/cards.py) |
+| `artifact` | An artifact built by hand from `a2a.types.Artifact` — its own id, a name, one text part and custom metadata — then a `text_artifact()` explaining it | [src/nodes/artifacts.py](src/nodes/artifacts.py) |
 | `file` | Two file artifacts: inline bytes, and a remote URL | [src/nodes/artifacts.py](src/nodes/artifacts.py) |
 | `data` | A structured data artifact instead of prose | [src/nodes/artifacts.py](src/nodes/artifacts.py) |
 | `composite` | One artifact delivered as three appended chunks | [src/nodes/artifacts.py](src/nodes/artifacts.py) |
-| `ask` | The agent stops, asks for input, and resumes where it stopped | [src/nodes/hitl.py](src/nodes/hitl.py) |
+| `ask` | The agent asks for input in a message, waits in the input-required state, and answers where it stopped | [src/nodes/hitl.py](src/nodes/hitl.py) |
 | `react` | A reaction is added to your message, then removed | [src/nodes/messaging.py](src/nodes/messaging.py) |
-| `metadata` | Custom metadata attached to a message and to an artifact | [src/nodes/messaging.py](src/nodes/messaging.py) |
+| `metadata` | Custom metadata attached to a message and to a data artifact | [src/nodes/messaging.py](src/nodes/messaging.py) |
 | `progress` | Progress reported while work is still running | [src/nodes/tasks.py](src/nodes/tasks.py) |
 | `task` | An explicit A2A Task, built by the agent, placed in the outbox | [src/nodes/tasks.py](src/nodes/tasks.py) |
 | `message` | An explicit A2A Message placed in the outbox | [src/nodes/tasks.py](src/nodes/tasks.py) |
-| `fail` | The task ends in the failed state, on purpose | [src/nodes/tasks.py](src/nodes/tasks.py) |
+| `fail` | The task ends in the failed state, on purpose, with a message saying why | [src/nodes/tasks.py](src/nodes/tasks.py) |
 | `context` | What the agent knows about this conversation and its caller | [src/nodes/context.py](src/nodes/context.py) |
 | `config` | Configuration values the control plane passed to this deployment | [src/nodes/config.py](src/nodes/config.py) |
 | `http` | The custom HTTP routes this agent serves next to A2A | [src/api.py](src/api.py) |
@@ -86,8 +101,13 @@ command keys and wired by hand, so the wiring is readable as LangGraph rather th
 loop. To add a demonstration, add one registry entry, one node function, and one
 `add_node`/`add_edge` pair in `src/graph.py`.
 
-Each node ends by returning the message it posted in `{"messages": [reply]}`, which is
-what accumulates the conversation history the `context` command counts.
+A node that answers with a text artifact returns no message: `{}`, or only the other
+state keys it sets, such as `a2a_outbox`. A message returned into `messages` would be
+sent to the client as a message beside the artifact. The `messages` state therefore holds
+the user's messages and the messages the agent keeps in the conversation — the question
+`ask` asks, the explanation of `fail`, and the streamed answers of `stream` and `llm` —
+and that is what the `context` command counts. An answer sent as an artifact is not in
+graph state, so a later model call does not see it.
 
 ## Notes on the platform
 
@@ -122,7 +142,10 @@ poetry run pytest
 `tests/test_commands.py` covers parsing and the registry with no SDK needed, and checks
 that the call named in each footer really is written in the file the footer points at;
 `tests/test_graph.py` asserts the graph exposes a node for every command;
+`tests/test_answers.py` runs the nodes with `thread.reply()` captured and checks that
+every answer is a text artifact with no message beside it, and that the status messages
+and the demonstrated messages stay messages;
 `tests/test_llm.py` runs the `llm` node against a faked model and checks where the
-model id comes from and how a failed call is reported;
+model id comes from and how a failed call is reported in a text artifact;
 `tests/test_hitl.py` checks that the answer resuming `ask` is read from the content
 blocks the server delivers.

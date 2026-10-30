@@ -45,13 +45,13 @@ class Command:
 COMMANDS: tuple[Command, ...] = (
     Command(
         key="help",
-        summary="This menu, as plain text",
-        api="thread.reply(text)",
+        summary="This menu, as a text artifact",
+        api="thread.reply(text_artifact(text))",
         source="src/handlers/menu.py",
     ),
     Command(
         key="stream",
-        summary="A single reply streamed in chunks as it is produced",
+        summary="A single answer streamed in chunks as it is produced",
         api="thread.reply(async iterator)",
         source="src/handlers/messaging.py",
     ),
@@ -73,6 +73,12 @@ COMMANDS: tuple[Command, ...] = (
         summary="Rich card, composed from components and referenced by URL",
         api="Card / Text / Fields / Actions",
         source="src/handlers/cards.py",
+    ),
+    Command(
+        key="artifact",
+        summary="An artifact built by hand: its own id, name, text and metadata",
+        api="thread.reply(Artifact(...), metadata=...)",
+        source="src/handlers/artifacts.py",
     ),
     Command(
         key="file",

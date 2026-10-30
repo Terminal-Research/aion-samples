@@ -5,8 +5,9 @@ aion:
       name: "Plain ADK Agent"
       description: >-
         An ADK agent with nothing Aion-specific in it, served as an Aion agent
-        as is: the message arrives as user content, the reply is the event it
-        yields, and the session is remembered between turns.
+        as is: the message arrives as user content, the answer is an artifact
+        it saves through ADK's own artifact API, and the session is remembered
+        between turns.
       version: "1.0.0"
       input_modes: [ "text" ]
       output_modes: [ "text" ]
@@ -14,8 +15,8 @@ aion:
         - id: "echo"
           name: "Echo"
           description: >-
-            Replies with a summary of what you sent and how many messages the
-            conversation holds so far.
+            Answers, as an artifact, with a summary of what you sent and how
+            many messages the conversation holds so far.
           tags: [ "plain", "adk" ]
           examples:
             - "Hello there"

@@ -19,6 +19,7 @@ import src.api  # registers the /showcase routes with the server
 from src.commands import parse_input
 from src.handlers import (
     answer_handler,
+    artifact_handler,
     ask_handler,
     card_handler,
     composite_handler,
@@ -46,6 +47,7 @@ HANDLERS: dict[str, Callable] = {
     "llm": llm_handler,
     "thinking": thinking_handler,
     "card": card_handler,
+    "artifact": artifact_handler,
     "file": file_handler,
     "data": data_handler,
     "composite": composite_handler,
