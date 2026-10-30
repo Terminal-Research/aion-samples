@@ -15,20 +15,20 @@ async def config_handler(ctx: AionInvocationContext, argument: str) -> None:
     an administrator per environment and arrive with the invocation, not from
     the process environment. Values declared as secrets arrive in plaintext, so
     treat them as sensitive: never log or echo them the way this sample echoes
-    its non-secret ones. The report is the task's result, a text artifact.
+    its non-secret ones. The report is the task's result, a text artifact. A
+    turn without an environment has nothing to report, so it only says so,
+    in a message.
     """
     thread = Thread.from_context(ctx.aion_runtime_context)
     environment = ctx.aion_runtime_context.get_environment()
 
     if environment is None:
         await thread.reply(
-            text_artifact(
-                with_footer(
-                    "config",
-                    "This turn carries no environment: configuration is delivered by "
-                    "the control plane, and a direct local A2A call bypasses it. Deploy "
-                    "the agent and set `greeting` on the environment to see it here.",
-                )
+            with_footer(
+                "config",
+                "This turn carries no environment: configuration is delivered by "
+                "the control plane, and a direct local A2A call bypasses it. Deploy "
+                "the agent and set `greeting` on the environment to see it here.",
             )
         )
         return

@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 
 from aion.api.exceptions import AionAuthenticationError
-from aion.core.a2a import text_artifact
+from aion.core.exceptions import TaskFailedError
 from aion.core.runtime import AionRuntimeContext
 from aion.langgraph.authoring.invocation import Thread
 from aion.langgraph.authoring.models import aion_chat_openai
@@ -35,30 +35,30 @@ async def llm_node(state: AgentState, *, runtime: Runtime[AionRuntimeContext]) -
     chunks from ``astream()`` reach the client as they arrive, as a section
     of the task's ``aion:stream-delta`` artifact. That artifact is the
     answer: the ``AIMessage`` returned into state is not sent again. Only
-    the closing footer is sent explicitly, as a text artifact.
+    the closing footer is sent explicitly, as a message beside it.
 
     The model is the ``model`` field of the environment's configuration, with
     no default in the code or in aion.yaml: whoever deploys the agent picks
-    one, and until then the turn is answered with how to set it.
+    one, and until then the turn says how to set it, in a message.
 
     The model service runs work for a principal, which arrives with an
     invocation the platform delivers. A direct local call carries none, so
-    the SDK refuses the call before sending it. Every failure is reported in
-    a text artifact rather than raised, because a broken model is not a
-    broken task.
+    the SDK refuses the call before sending it. A call that is refused or
+    fails ends the task as failed, with the explanation as its reason:
+    ``TaskFailedError`` makes it the message of the FAILED status.
     """
     thread = Thread.from_context(runtime.context)
 
     prompt = (state.get("argument") or "").strip()
     if not prompt:
-        await thread.reply(text_artifact(with_footer("llm", USAGE)))
-        return {}
+        reply = await thread.reply(with_footer("llm", USAGE))
+        return {"messages": [reply]}
 
     environment = runtime.context.get_environment()
     model = environment.get_configuration_variable("model") if environment else None
     if not model:
-        await thread.reply(text_artifact(with_footer("llm", *_no_model(environment is not None))))
-        return {}
+        reply = await thread.reply(with_footer("llm", *_no_model(environment is not None)))
+        return {"messages": [reply]}
     chat = aion_chat_openai(model)
 
     try:
@@ -76,19 +76,16 @@ async def llm_node(state: AgentState, *, runtime: Runtime[AionRuntimeContext]) -
             refusal or exc,
             exc_info=refusal is None,
         )
-        await thread.reply(text_artifact(with_footer("llm", *_explain(model, exc, refusal))))
-        return {}
+        raise TaskFailedError("\n".join(_explain(model, exc, refusal))) from exc
 
     answer = "".join(_text(chunk.content) for chunk in chunks)
-    await thread.reply(
-        text_artifact(
-            with_footer("llm", f"Answered by `{model}`, the `model` field of this environment's configuration.")
-        )
+    footer = await thread.reply(
+        with_footer("llm", f"Answered by `{model}`, the `model` field of this environment's configuration.")
     )
     # Keep the id the chunks streamed under: LangGraph recognises the message as
     # the one already sent and does not send it again as a new one.
     streamed_id = chunks[0].id if chunks else None
-    return {"messages": [AIMessage(content=answer, id=streamed_id)]}
+    return {"messages": [AIMessage(content=answer, id=streamed_id), footer]}
 
 
 def _text(content: object) -> str:
@@ -167,7 +164,7 @@ ADVICE = {
 
 
 def _explain(model: str, exc: BaseException, refusal: AionAuthenticationError | None) -> list[str]:
-    """Turn a failed model call into answer lines.
+    """Turn a failed model call into the lines of the task's failure reason.
 
     Whoever refused the call explains it best, so its words are shown verbatim:
     the SDK's, when it refused before sending, or the model service's. The

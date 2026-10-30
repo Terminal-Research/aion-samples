@@ -33,19 +33,18 @@ async def ask_handler(ctx: AionInvocationContext, argument: str) -> AsyncGenerat
     conversation's context id.
 
     The question is a message: it is what the agent says while it waits for
-    input, not a result. The explanation of the demonstration is the task's
-    result, a text artifact.
+    input, not a result. Its explanation travels in the same message, so the
+    turn says one thing.
     """
     thread = Thread.from_context(ctx.aion_runtime_context)
 
-    await thread.reply(QUESTION)
     await thread.reply(
-        text_artifact(
-            with_footer(
-                "ask",
-                "Reply with anything. This turn is finished — the answer arrives as a "
-                "new turn, and session state is what tells me a question is open.",
-            )
+        with_footer(
+            "ask",
+            QUESTION,
+            "",
+            "Reply with anything. This turn is finished — the answer arrives as a "
+            "new turn, and session state is what tells me a question is open.",
         )
     )
 

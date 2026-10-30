@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from aion.adk.authoring.invocation import AionInvocationContext, Thread
-from aion.core.a2a import text_artifact
 from aion.core.agent.invocation.card import Actions, Button, Card, Divider, Field, Fields, Text
 
 from src.replies import with_footer
@@ -18,10 +17,26 @@ async def card_handler(ctx: AionInvocationContext, argument: str) -> None:
     Cards render natively where the channel supports them and degrade to text
     where it does not, so an agent can send one without knowing the surface.
     Buttons with an ``id`` come back as card-action events; buttons with a
-    ``url`` just open a link. The cards stay messages; the explanation after
-    them is the task's result, a text artifact.
+    ``url`` just open a link.
+
+    A card is a message, and the cards are this command's answer, so the
+    explanation goes first and the cards close the turn.
     """
     thread = Thread.from_context(ctx.aion_runtime_context)
+
+    await thread.reply(
+        with_footer(
+            "card",
+            "Two cards follow: the first is composed from typed components, the second "
+            "points at a card document hosted elsewhere. This is the only command that "
+            "sends cards — every other answer is text, so a channel that renders no "
+            "cards still gets the whole tour.",
+            "",
+            'The "Try ask" button carries an action id. Pressing it sends a card-action '
+            "event, which this agent routes to the same handler as typing `ask` — see "
+            "src/agent.py.",
+        )
+    )
 
     composed = (
         Card("Deployment ready")
@@ -41,19 +56,3 @@ async def card_handler(ctx: AionInvocationContext, argument: str) -> None:
     )
     await thread.reply(composed)
     await thread.reply(Card(url=REMOTE_CARD_URL))
-
-    await thread.reply(
-        text_artifact(
-            with_footer(
-                "card",
-                "Two cards: the first was composed from typed components, the second "
-                "points at a card document hosted elsewhere. This is the only "
-                "command that sends cards — every other answer is text, so a "
-                "channel that renders no cards still gets the whole tour.",
-                "",
-                'The "Try ask" button carries an action id. Pressing it sends a '
-                "card-action event, which this agent routes to the same handler as "
-                "typing `ask` — see src/agent.py.",
-            )
-        )
-    )

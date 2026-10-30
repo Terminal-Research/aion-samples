@@ -2,8 +2,8 @@
 
 One command streams: `stream` hands ``thread.reply()`` an async iterator built
 here, so the answer arrives in pieces the way a model's tokens do. Every other
-answer is a single text artifact, because chunking text the agent already holds
-buys nothing but events.
+text is sent whole, as a text artifact or a message, because chunking text the
+agent already holds buys nothing but events.
 
 The other streaming answer in this agent is `llm`, and it does not come
 through here: those chunks are the model's own.

@@ -18,24 +18,23 @@ async def config_node(state: AgentState, *, runtime: Runtime[AionRuntimeContext]
     an administrator per environment and arrive with the invocation, not from
     the process environment. Values declared as secrets arrive in plaintext, so
     treat them as sensitive: never log or echo them the way this sample echoes
-    its non-secret ones.
+    its non-secret ones. A turn without an environment has no values to
+    report, so it only says so, in a message.
     """
     thread = Thread.from_context(runtime.context)
     environment = runtime.context.get_environment()
 
     if environment is None:
-        await thread.reply(
-            text_artifact(
-                with_footer(
-                    "config",
-                    "This turn carries no environment. Configuration reaches an agent "
-                    "with the invocation, not through the process environment, and a "
-                    "direct local A2A call carries none. Deploy the agent and set "
-                    "`greeting` on the environment to see the values here.",
-                )
+        reply = await thread.reply(
+            with_footer(
+                "config",
+                "This turn carries no environment. Configuration reaches an agent "
+                "with the invocation, not through the process environment, and a "
+                "direct local A2A call carries none. Deploy the agent and set "
+                "`greeting` on the environment to see the values here.",
             )
         )
-        return {}
+        return {"messages": [reply]}
 
     variables = environment.configuration_variables or {}
     lines = [f"  {key} = {value}" for key, value in sorted(variables.items())] or ["  (none set)"]

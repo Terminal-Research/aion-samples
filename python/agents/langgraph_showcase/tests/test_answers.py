@@ -1,10 +1,13 @@
-"""Every answer is the task's result: a text artifact, with no message beside it.
+"""What each command sends: its result, and the messages beside it.
 
-The nodes run with ``thread.reply()`` captured. A node that answers with an
-artifact returns no message, because a returned ``AIMessage`` would reach the
-client as a message as well. The texts that stay messages — the question
-`ask` asks, the explanation of `fail`, the message `metadata` demonstrates —
-are checked to be plain text replies.
+The nodes run with ``thread.reply()`` captured. A command whose answer is text
+sends it as a text artifact and returns no message, because a returned
+``AIMessage`` would reach the client as a message as well. A command whose
+result is something else — files, data, a hand-built artifact, an explicit
+Task, cards — sends its explanation as a message and keeps it in state. So
+do the turns that do nothing but say why, and the texts that are messages by
+nature: the question `ask` asks, the explanation of `fail`, the message
+`metadata` demonstrates.
 """
 
 import asyncio
@@ -42,7 +45,7 @@ from src.nodes import artifacts as artifacts_module
 from src.nodes import hitl as hitl_module
 from src.nodes import messaging as messaging_module
 from src.nodes import tasks as tasks_module
-from tests.support import answer_text
+from tests.support import answer_text, message_text
 
 
 def _run(node, command: str) -> dict:
@@ -53,6 +56,11 @@ def _run(node, command: str) -> dict:
 
 def _footer(command: str) -> str:
     return COMMANDS_BY_KEY[command].footer()
+
+
+def _kept(update: dict) -> list[str]:
+    """The texts of the messages a node keeps in state."""
+    return [message.content for message in update["messages"]]
 
 
 @pytest.fixture(autouse=True)
@@ -66,16 +74,14 @@ def no_waiting(monkeypatch):
     ("command", "node"),
     [
         ("help", menu_node),
-        ("config", config_node),
         ("context", context_node),
         ("http", http_node),
         ("thinking", thinking_node),
-        ("react", react_node),
         ("progress", progress_node),
     ],
 )
-def test_answer_is_one_text_artifact_and_no_message(command, node, replies):
-    """A command that only answers sends one text artifact and returns no message."""
+def test_text_answer_is_one_text_artifact_and_no_message(command, node, replies):
+    """A command whose answer is text sends one text artifact and returns no message."""
     update = _run(node, command)
 
     assert len(replies) == 1
@@ -92,31 +98,50 @@ def test_every_text_artifact_is_a_new_artifact(replies):
     assert replies[0].content.artifact_id != replies[1].content.artifact_id
 
 
-def test_hand_built_artifact_keeps_every_field_it_was_given(replies):
-    """`artifact` sends an Artifact built field by field, then explains it in a text artifact."""
+@pytest.mark.parametrize(
+    ("command", "node"),
+    [
+        ("config", config_node),
+        ("react", react_node),
+        ("composite", composite_node),
+    ],
+)
+def test_a_turn_that_does_nothing_says_why_in_a_message(command, node, monkeypatch, replies):
+    """No environment, no distribution, no stream writer: nothing is produced, so no artifact."""
+    monkeypatch.setattr(artifacts_module, "get_stream_writer", lambda: None)
+
+    update = _run(node, command)
+
+    assert len(replies) == 1
+    assert message_text(replies[0]).endswith(_footer(command))
+    assert _kept(update) == [replies[0].content]
+
+
+def test_hand_built_artifact_keeps_every_field_and_is_explained_in_a_message(replies):
+    """`artifact` sends an Artifact built field by field, then describes it in a message."""
     update = _run(artifact_node, "artifact")
 
-    hand_built, explanation = (reply.content for reply in replies)
-    assert isinstance(hand_built, Artifact)
-    assert hand_built.artifact_id.startswith("hand-built-")
-    assert hand_built.name == "hand-built"
-    assert answer_text(replies[0])
-    assert dict(hand_built.metadata) == {"showcase.kind": "hand-built"}
+    hand_built, explanation = replies
+    assert isinstance(hand_built.content, Artifact)
+    assert hand_built.content.artifact_id.startswith("hand-built-")
+    assert hand_built.content.name == "hand-built"
+    assert answer_text(hand_built)
+    assert dict(hand_built.content.metadata) == {"showcase.kind": "hand-built"}
 
-    text = answer_text(replies[1])
-    assert explanation.name == "text"
-    assert hand_built.artifact_id in text
+    text = message_text(explanation)
+    assert hand_built.content.artifact_id in text
     assert "text_artifact" in text
     assert text.endswith(_footer("artifact"))
-    assert update == {}
+    assert _kept(update) == [text]
 
 
-def test_cards_are_followed_by_a_text_answer(replies):
+def test_cards_follow_their_explanation(replies):
+    """The cards are the answer, so the explanation goes first and the cards close the turn."""
     update = _run(card_node, "card")
 
-    assert [type(reply.content) for reply in replies[:2]] == [Card, Card]
-    assert answer_text(replies[2]).endswith(_footer("card"))
-    assert update == {}
+    assert message_text(replies[0]).endswith(_footer("card"))
+    assert [type(reply.content) for reply in replies[1:]] == [Card, Card]
+    assert _kept(update) == [replies[0].content]
 
 
 @pytest.mark.parametrize(
@@ -126,16 +151,16 @@ def test_cards_are_followed_by_a_text_answer(replies):
         ("data", data_node, ["totals"]),
     ],
 )
-def test_artifacts_are_followed_by_a_text_answer(command, node, names, replies):
-    """The demonstrated artifacts go out unchanged, and the explanation is one more artifact."""
+def test_artifacts_are_explained_in_a_message(command, node, names, replies):
+    """The artifacts are the result; the explanation after them is a message."""
     update = _run(node, command)
 
     assert [reply.content.name for reply in replies[:-1]] == names
-    assert answer_text(replies[-1]).endswith(_footer(command))
-    assert update == {}
+    assert message_text(replies[-1]).endswith(_footer(command))
+    assert _kept(update) == [replies[-1].content]
 
 
-def test_composite_chunks_are_followed_by_a_text_answer(monkeypatch, replies):
+def test_composite_chunks_are_explained_in_a_message(monkeypatch, replies):
     events: list = []
     monkeypatch.setattr(artifacts_module, "get_stream_writer", lambda: events.append)
 
@@ -143,16 +168,15 @@ def test_composite_chunks_are_followed_by_a_text_answer(monkeypatch, replies):
 
     assert len(events) == 3
     assert len({event.artifact.artifact_id for event in events}) == 1
-    assert answer_text(replies[0]).endswith(_footer("composite"))
-    assert update == {}
+    assert message_text(replies[0]).endswith(_footer("composite"))
+    assert _kept(update) == [replies[0].content]
 
 
 def test_ask_question_is_a_message_and_the_answer_after_resume_is_an_artifact(monkeypatch, replies):
     """The question stays in the conversation; what follows the resume is the task's answer."""
     asked = _run(ask_node, "ask")
 
-    assert isinstance(replies[0].content, str)
-    assert [message.content for message in asked["messages"]] == [replies[0].content]
+    assert _kept(asked) == [message_text(replies[0])]
 
     monkeypatch.setattr(hitl_module, "interrupt", lambda value: {"messages": [HumanMessage("staging")]})
     answered = _run(ask_wait_node, "ask")
@@ -161,42 +185,41 @@ def test_ask_question_is_a_message_and_the_answer_after_resume_is_an_artifact(mo
     assert answered == {}
 
 
-def test_metadata_keeps_its_message_and_explains_in_an_artifact(replies):
-    """The message with metadata is the demonstration; the explanation is a text artifact."""
+def test_metadata_sends_its_message_its_data_and_an_explanation(replies):
+    """The data artifact is the result; the message with metadata and the explanation are messages."""
     update = _run(metadata_node, "metadata")
 
     message, data, explanation = replies
-    assert isinstance(message.content, str)
+    assert message_text(message) == "This message carries metadata."
     assert message.metadata == {"showcase.step": "message", "showcase.run": "demo"}
     assert data.content.name == "metadata_demo"
     assert data.metadata == {"showcase.step": "artifact"}
-    assert answer_text(explanation).endswith(_footer("metadata"))
-    assert update == {}
+    assert message_text(explanation).endswith(_footer("metadata"))
+    assert _kept(update) == [explanation.content]
 
 
-def test_explicit_task_goes_to_the_outbox_and_the_explanation_is_an_artifact(replies):
+def test_explicit_task_goes_to_the_outbox_and_is_explained_in_a_message(replies):
     update = _run(task_node, "task")
 
-    assert set(update) == {"a2a_outbox"}
     assert update["a2a_outbox"].task.artifacts[0].name == "explicit_artifact"
-    assert answer_text(replies[0]).endswith(_footer("task"))
+    assert message_text(replies[0]).endswith(_footer("task"))
+    assert _kept(update) == [replies[0].content]
 
 
-def test_explicit_message_goes_to_the_outbox_and_the_explanation_is_an_artifact(replies):
+def test_explicit_message_goes_to_the_outbox_and_is_explained_in_a_message(replies):
     update = _run(message_node, "message")
 
-    assert set(update) == {"a2a_outbox"}
     assert update["a2a_outbox"].message.parts[0].text == "An explicit A2A message, built by the agent."
-    assert answer_text(replies[0]).endswith(_footer("message"))
+    assert message_text(replies[0]).endswith(_footer("message"))
+    assert _kept(update) == [replies[0].content]
 
 
 def test_failure_is_explained_in_a_message(replies):
     """A failed task has no result, so its explanation stays a message."""
     update = _run(fail_node, "fail")
 
-    assert isinstance(replies[0].content, str)
     assert update["a2a_outbox"].task.status.state == TaskState.TASK_STATE_FAILED
-    assert [message.content for message in update["messages"]] == [replies[0].content]
+    assert _kept(update) == [message_text(replies[0])]
 
 
 def test_stream_answers_through_the_stream(replies):

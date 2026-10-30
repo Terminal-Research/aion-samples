@@ -65,8 +65,8 @@ async def task_node(state: AgentState, *, runtime: Runtime[AionRuntimeContext]) 
 
     Everything above this uses the thread helpers and lets the server assemble
     the response. When you need full control — your own history, artifacts and
-    metadata on the task — put a Task in the outbox. The Task is the
-    demonstration; the explanation beside it goes out as a text artifact.
+    metadata on the task — put a Task in the outbox. The Task, with its
+    artifact, is the result; the explanation beside it is a message.
     """
     thread = Thread.from_context(runtime.context)
     task_id, context_id = _inbound_ids(runtime)
@@ -92,24 +92,23 @@ async def task_node(state: AgentState, *, runtime: Runtime[AionRuntimeContext]) 
         metadata={"built_by": "showcase"},
     )
 
-    await thread.reply(
-        text_artifact(
-            with_footer(
-                "task",
-                "An explicit A2A Task is on its way out, carrying its own history, one "
-                "artifact and custom metadata.",
-            )
+    reply = await thread.reply(
+        with_footer(
+            "task",
+            "An explicit A2A Task is on its way out, carrying its own history, one "
+            "artifact and custom metadata.",
         )
     )
-    return {"a2a_outbox": A2AOutbox(task=task)}
+    return {"messages": [reply], "a2a_outbox": A2AOutbox(task=task)}
 
 
 async def message_node(state: AgentState, *, runtime: Runtime[AionRuntimeContext]) -> dict:
     """Answer with a bare A2A Message.
 
     A Message is the right response when there is no work to track — no task
-    lifecycle, just a reply bound to the same context. The Message is the
-    demonstration; the explanation beside it goes out as a text artifact.
+    lifecycle, just a reply bound to the same context. The explanation is a
+    message; the outbox Message is the answer, the one the server copies
+    into ``aion:assistant-answer``.
     """
     thread = Thread.from_context(runtime.context)
     task_id, context_id = _inbound_ids(runtime)
@@ -122,16 +121,14 @@ async def message_node(state: AgentState, *, runtime: Runtime[AionRuntimeContext
         context_id=context_id,
     )
 
-    await thread.reply(
-        text_artifact(
-            with_footer(
-                "message",
-                "An explicit A2A Message is on its way out — same context, no task "
-                "lifecycle attached.",
-            )
+    reply = await thread.reply(
+        with_footer(
+            "message",
+            "An explicit A2A Message is on its way out — same context, no task "
+            "lifecycle attached.",
         )
     )
-    return {"a2a_outbox": A2AOutbox(message=outbound)}
+    return {"messages": [reply], "a2a_outbox": A2AOutbox(message=outbound)}
 
 
 async def fail_node(state: AgentState, *, runtime: Runtime[AionRuntimeContext]) -> dict:

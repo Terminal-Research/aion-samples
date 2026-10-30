@@ -8,21 +8,30 @@ the footer names — no reply helper stands between the two, so every demonstrat
 as the SDK code you would write yourself.
 
 Every answer is text the agent already knows, so what you are looking at is platform
-behaviour rather than model output. An answer is the task's result, not a message: it is
-sent as a text artifact with `thread.reply(text_artifact(text))`, and nothing beside it
-repeats the text as a message. Two commands stream: `stream`, which paces its own chunks
-because that is what it demonstrates, and `llm`, where a model from the platform's
-catalog answers and its tokens are the chunks; both answer in the task's
-`aion:stream-delta` artifact. `card` is the one command that sends a rich card;
-everything else is plain text.
+behaviour rather than model output. What a command produces is the task's result, and a
+result is an artifact: files, data, a hand-built artifact, or — when the answer is text —
+a text artifact sent with `thread.reply(text_artifact(text))`. Two commands stream:
+`stream`, which paces its own chunks because that is what it demonstrates, and `llm`,
+where a model from the platform's catalog answers and its tokens are the chunks; both
+answer in the task's `aion:stream-delta` artifact. `card` is the one command that sends
+rich cards, and a card is a message.
 
-A few texts stay messages, because they are not the task's result:
+Text that is not the result is a message:
 
+- the explanation beside a result — after the artifacts of `artifact`, `file`, `data`,
+  `composite` and `metadata`, after the explicit Task of `task`, after the streamed
+  answer of `llm`, before the explicit Message of `message`, which is that task's
+  answer, and before the cards of `card`, which close the turn;
+- a turn that does nothing but say why: `config` without an environment, `react`
+  without a distribution, `llm` without a prompt or a model;
 - the question `ask` asks before the task waits in the input-required state;
 - the explanation `fail` sends with the failed task;
 - the messages that are themselves the demonstration — the message `metadata` attaches
   metadata to, and the explicit A2A Message and Task that `message` and `task` place in
   the outbox.
+
+A model call that is refused or fails ends `llm`'s task as failed: the node raises
+`TaskFailedError`, and its explanation becomes the message of the FAILED status.
 
 Progress (`progress`) and thoughts (`thinking`) go to the task's `aion:thinking-delta`
 artifact, which is neither a message nor a result.
@@ -39,8 +48,9 @@ local call. `llm` calls the platform's model service, which needs three things �
 `AION_CLIENT_ID` / `AION_CLIENT_SECRET` in `.env` (copy `.env.example`), a turn the
 platform delivered, because the model service runs work for the environment's identity
 and a direct local call carries none, and a model chosen in the `model` field of the
-environment's configuration. Until then, `llm` explains what is missing in its reply
-instead of failing.
+environment's configuration. Without a model, `llm` says how to choose one, in a
+message; without credentials or a platform-delivered turn the SDK refuses the call, and
+the task fails with that refusal as its reason.
 
 Talk to it from the terminal chat client:
 
@@ -60,7 +70,7 @@ Send `help` to get the menu — every demonstration is one keyword away from the
 | `llm {prompt}` | A model answers the prompt; its tokens stream straight out of the model call, no `Thread` involved | [src/nodes/llm.py](src/nodes/llm.py) |
 | `thinking` | Two thoughts, kept in the task's `aion:thinking-delta` artifact rather than the history | [src/nodes/messaging.py](src/nodes/messaging.py) |
 | `card` | A card composed from typed components, and one referenced by URL | [src/nodes/cards.py](src/nodes/cards.py) |
-| `artifact` | An artifact built by hand from `a2a.types.Artifact` — its own id, a name, one text part and custom metadata — then a `text_artifact()` explaining it | [src/nodes/artifacts.py](src/nodes/artifacts.py) |
+| `artifact` | An artifact built by hand from `a2a.types.Artifact` — its own id, a name, one text part and custom metadata — then a message explaining it | [src/nodes/artifacts.py](src/nodes/artifacts.py) |
 | `file` | Two file artifacts: inline bytes, and a remote URL | [src/nodes/artifacts.py](src/nodes/artifacts.py) |
 | `data` | A structured data artifact instead of prose | [src/nodes/artifacts.py](src/nodes/artifacts.py) |
 | `composite` | One artifact delivered as three appended chunks | [src/nodes/artifacts.py](src/nodes/artifacts.py) |
@@ -101,12 +111,13 @@ command keys and wired by hand, so the wiring is readable as LangGraph rather th
 loop. To add a demonstration, add one registry entry, one node function, and one
 `add_node`/`add_edge` pair in `src/graph.py`.
 
-A node that answers with a text artifact returns no message: `{}`, or only the other
-state keys it sets, such as `a2a_outbox`. A message returned into `messages` would be
-sent to the client as a message beside the artifact. The `messages` state therefore holds
-the user's messages and the messages the agent keeps in the conversation — the question
-`ask` asks, the explanation of `fail`, and the streamed answers of `stream` and `llm` —
-and that is what the `context` command counts. An answer sent as an artifact is not in
+A node whose answer is a text artifact returns no message: `{}`, or only the other
+state keys it sets. A message returned into `messages` would be sent to the client as a
+message beside the artifact. A node that sends a message returns it into `messages`, so
+the conversation keeps it; the server recognises it as already sent. The `messages` state
+therefore holds the user's messages, the messages the agent sent — explanations, the
+question `ask` asks, the explanation of `fail` — and the streamed answers of `stream` and
+`llm`, and that is what the `context` command counts. An answer sent as an artifact is not in
 graph state, so a later model call does not see it.
 
 ## Notes on the platform
@@ -142,10 +153,12 @@ poetry run pytest
 `tests/test_commands.py` covers parsing and the registry with no SDK needed, and checks
 that the call named in each footer really is written in the file the footer points at;
 `tests/test_graph.py` asserts the graph exposes a node for every command;
-`tests/test_answers.py` runs the nodes with `thread.reply()` captured and checks that
-every answer is a text artifact with no message beside it, and that the status messages
-and the demonstrated messages stay messages;
+`tests/test_answers.py` runs the nodes with `thread.reply()` captured and checks what
+each command sends: a text artifact when the answer is text, and a message kept in state
+for an explanation beside a result, a turn that does nothing, the question, the failure
+and the demonstrated messages;
 `tests/test_llm.py` runs the `llm` node against a faked model and checks where the
-model id comes from and how a failed call is reported in a text artifact;
+model id comes from, that a missing prompt or model gets a message, and that a failed
+call fails the task with its explanation as the reason;
 `tests/test_hitl.py` checks that the answer resuming `ask` is read from the content
 blocks the server delivers.

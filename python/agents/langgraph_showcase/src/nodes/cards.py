@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from aion.core.agent.invocation.card import Actions, Button, Card, Divider, Field, Fields, Text
-from aion.core.a2a import text_artifact
 from aion.core.runtime import AionRuntimeContext
 from aion.langgraph.authoring.invocation import Thread
 from langgraph.runtime import Runtime
@@ -22,8 +21,25 @@ async def card_node(state: AgentState, *, runtime: Runtime[AionRuntimeContext]) 
     where it does not, so an agent can send one without knowing the surface.
     Buttons with an ``id`` come back as card-action events; buttons with a
     ``url`` just open a link.
+
+    A card is a message, and the cards are this command's answer, so the
+    explanation goes first and the cards close the turn.
     """
     thread = Thread.from_context(runtime.context)
+
+    reply = await thread.reply(
+        with_footer(
+            "card",
+            "Two cards follow: the first is composed from typed components, the second "
+            "points at a card document hosted elsewhere. This is the only command that "
+            "sends cards — every other answer is plain text, so a channel that renders "
+            "no cards still gets the whole tour.",
+            "",
+            'The "Try ask" button carries an action id. Pressing it sends a card-action '
+            "event, which this agent routes to the same node as typing `ask` — see "
+            "src/router.py.",
+        )
+    )
 
     composed = (
         Card("Deployment ready")
@@ -43,20 +59,4 @@ async def card_node(state: AgentState, *, runtime: Runtime[AionRuntimeContext]) 
     )
     await thread.reply(composed)
     await thread.reply(Card(url=REMOTE_CARD_URL))
-
-    await thread.reply(
-        text_artifact(
-            with_footer(
-                "card",
-                "Two cards: the first was composed from typed components, the second "
-                "points at a card document hosted elsewhere. This is the only "
-                "command that sends cards — every other answer is plain text, so a "
-                "channel that renders no cards still gets the whole tour.",
-                "",
-                'The "Try ask" button carries an action id. Pressing it sends a '
-                "card-action event, which this agent routes to the same node as typing "
-                "`ask` — see src/router.py.",
-            )
-        )
-    )
-    return {}
+    return {"messages": [reply]}

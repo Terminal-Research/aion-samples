@@ -15,20 +15,35 @@ from src.commands import COMMANDS, parse_command
 from src.handlers import answer_handler
 from src.handlers import tasks as tasks_module
 from src.handlers.artifacts import HAND_BUILT_METADATA, HAND_BUILT_NAME
+from src.handlers.hitl import QUESTION
 
-MESSAGES = {
-    "ask": 1,  # the question the turn leaves open
-    "metadata": 1,  # the message that carries the metadata
-    "fail": 1,  # the explanation of a task that fails, and so has no result
+SENT = {
+    # The answer is text: one text artifact.
+    "help": ["text"],
+    "context": ["text"],
+    "http": ["text"],
+    "thinking": ["text"],
+    "progress": ["text"],
+    # The answer is streamed.
+    "stream": ["stream"],
+    # The result is something else; the explanation beside it is a message.
+    "artifact": ["artifact", "message"],
+    "file": ["artifact", "artifact", "message"],
+    "data": ["artifact", "message"],
+    "composite": ["artifact", "artifact", "message"],
+    "metadata": ["message", "artifact", "message"],
+    "task": ["message"],
+    "message": ["message"],
+    "card": ["message", "card", "card"],
+    # A direct local turn: nothing to do, so a message says why.
+    "llm": ["message"],
+    "config": ["message"],
+    "react": ["message"],
+    # Messages by nature: a question, and the explanation of a failure.
+    "ask": ["message"],
+    "fail": ["message"],
 }
-"""Commands that send a text message, and how many: a question, the message they
-demonstrate, or the explanation of a failure."""
-
-STREAMED = {"stream"}
-"""Commands whose answer is a stream of chunks rather than a text artifact."""
-
-FAILED = {"fail"}
-"""Commands that end the task as failed: a failed task has no result, so they send no artifact."""
+"""What each command hands to ``thread.reply()`` on a direct local turn, in order."""
 
 
 def test_every_command_has_a_handler():
@@ -116,29 +131,42 @@ def _is_text_artifact(content: object) -> bool:
     )
 
 
-@pytest.mark.parametrize("key", sorted(HANDLERS))
-def test_every_answer_is_a_text_artifact(key, sent):
-    """A command's text answer is the task's result: a text artifact, never a message.
+def _kind(content: object) -> str:
+    if isinstance(content, str):
+        return "message"
+    if isinstance(content, Card):
+        return "card"
+    if _is_text_artifact(content):
+        return "text"
+    if isinstance(content, Artifact):
+        return "artifact"
+    if hasattr(content, "__aiter__"):
+        return "stream"
+    return type(content).__name__
 
-    Messages are sent only where a command asks a question or demonstrates a
-    message, and no handler yields a text event of its own, so no answer is
-    also sent as a message beside its artifact.
+
+def test_every_command_is_listed():
+    assert set(SENT) == set(HANDLERS)
+
+
+@pytest.mark.parametrize("key", sorted(HANDLERS))
+def test_each_command_sends_its_result_and_explains_it_in_messages(key, sent):
+    """Text is a text artifact only when it is the answer; text beside a result is a message.
+
+    No handler yields a text event of its own, so nothing is sent twice. Every
+    command except `stream`, whose footer is streamed with the answer, names
+    its SDK call in a footer, in the text artifact or in a message.
     """
     events = _run(HANDLERS[key])
 
     contents = [content for content, _ in sent]
-    texts = [content for content in contents if isinstance(content, str)]
-    assert len(texts) == MESSAGES.get(key, 0), f"{key}: {texts}"
+    assert [_kind(content) for content in contents] == SENT[key]
     assert all(event.content is None for event in events), f"{key} yielded a text event"
 
-    if key in STREAMED:
-        assert hasattr(contents[-1], "__aiter__")
-        assert not any(isinstance(content, Artifact) for content in contents)
-    elif key in FAILED:
-        assert not any(isinstance(content, Artifact) for content in contents)
-    else:
-        assert _is_text_artifact(contents[-1]), f"{key} ends with {contents[-1]!r}"
-        assert "↳ " in contents[-1].parts[0].text, f"{key}: the answer lost its footer"
+    if key != "stream":
+        texts = [content if isinstance(content, str) else content.parts[0].text
+                 for content in contents if _kind(content) in ("message", "text")]
+        assert any("↳ " in text for text in texts), f"{key}: the answer lost its footer"
 
 
 def test_the_answer_to_an_open_question_is_a_text_artifact(sent):
@@ -153,19 +181,20 @@ def test_the_answer_to_an_open_question_is_a_text_artifact(sent):
 
 
 def test_artifact_sends_a_hand_built_artifact(sent):
-    """`artifact` sends its own artifact, with its metadata, before the text artifact explaining it."""
+    """`artifact` sends its own artifact, with its metadata, before the message explaining it."""
     _run(HANDLERS["artifact"])
 
     (built, metadata), (explanation, _) = sent
     assert isinstance(built, Artifact) and built.name == HAND_BUILT_NAME
     assert built.artifact_id and len(built.parts) == 1 and built.parts[0].text
     assert metadata == HAND_BUILT_METADATA
-    assert _is_text_artifact(explanation)
-    assert built.artifact_id in explanation.parts[0].text
+    assert isinstance(explanation, str)
+    assert built.artifact_id in explanation
 
 
-def test_cards_stay_cards(sent):
-    """`card` still sends its two cards; only its explanation is a text artifact."""
-    _run(HANDLERS["card"])
+def test_ask_sends_the_question_and_its_explanation_in_one_message(sent):
+    _run(HANDLERS["ask"])
 
-    assert [type(content) for content, _ in sent[:2]] == [Card, Card]
+    (message, _), = sent
+    assert message.startswith(QUESTION)
+    assert "Reply with anything" in message

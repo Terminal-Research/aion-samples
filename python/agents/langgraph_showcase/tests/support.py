@@ -39,6 +39,12 @@ def capture_replies(monkeypatch) -> list[Reply]:
     return captured
 
 
+def message_text(reply: Reply) -> str:
+    """Return the text of a message, failing unless the reply was plain text."""
+    assert isinstance(reply.content, str), f"expected a message, got {type(reply.content).__name__}"
+    return reply.content
+
+
 def answer_text(reply: Reply) -> str:
     """Return the text of an answer, failing unless it is a one-part text artifact."""
     artifact = reply.content

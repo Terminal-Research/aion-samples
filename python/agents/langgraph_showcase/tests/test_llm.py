@@ -11,12 +11,13 @@ from aion.core.a2a.extensions.distribution import (
     Environment,
 )
 from aion.api.exceptions import AionAuthenticationError
+from aion.core.exceptions import TaskFailedError
 from aion.core.runtime import AionRuntimeContext
 from langchain_core.messages import AIMessageChunk
 
 from src.nodes import llm as llm_module
 from src.nodes.llm import USAGE, llm_node
-from tests.support import answer_text
+from tests.support import message_text
 
 ANSWER_CHUNKS = ("Hello", ", ", "world")
 STREAM_ID = "lc_run--stream"
@@ -44,6 +45,14 @@ def _runtime(configuration: dict[str, str] | None = None) -> SimpleNamespace:
 
 def _state(argument: str) -> dict:
     return {"messages": [], "command": "llm", "input_text": f"llm {argument}", "argument": argument}
+
+
+def _failure(monkeypatch, error: BaseException, model: str = "some-model") -> str:
+    """Run the node against a model that raises ``error``; return the task's failure reason."""
+    monkeypatch.setattr(llm_module, "aion_chat_openai", lambda model, **kwargs: _FakeChat(error))
+    with pytest.raises(TaskFailedError) as failure:
+        asyncio.run(llm_node(_state("hi"), runtime=_runtime({"model": model})))
+    return str(failure.value)
 
 
 class _FakeChat:
@@ -79,56 +88,55 @@ def test_model_comes_from_the_environment(model_calls):
 
 
 def test_no_model_means_no_call(model_calls, replies):
-    """There is no default model: without one the answer says how to set it."""
+    """There is no default model: without one a message says how to set it."""
     first = asyncio.run(llm_node(_state("hi"), runtime=_runtime(None)))
     second = asyncio.run(llm_node(_state("hi"), runtime=_runtime({"greeting": "Hi"})))
     assert model_calls == []
-    assert "no environment" in answer_text(replies[0])
-    assert "Set the `model` field" in answer_text(replies[1])
-    assert first == second == {}
+    assert "no environment" in message_text(replies[0])
+    assert "Set the `model` field" in message_text(replies[1])
+    assert [message.content for message in first["messages"]] == [replies[0].content]
+    assert [message.content for message in second["messages"]] == [replies[1].content]
 
 
-def test_model_answer_is_the_only_message_in_state(model_calls, replies):
-    """The streamed chunks become one AIMessage; the footer is a text artifact, not a message."""
+def test_model_answer_is_followed_by_a_footer_message(model_calls, replies):
+    """The streamed chunks become one AIMessage; the footer after them is a message."""
     update = asyncio.run(llm_node(_state("hi"), runtime=_runtime({"model": "some-model"})))
-    assert [message.content for message in update["messages"]] == ["".join(ANSWER_CHUNKS)]
+    assert len(replies) == 1
+    assert "Answered by `some-model`" in message_text(replies[0])
+    assert [message.content for message in update["messages"]] == [
+        "".join(ANSWER_CHUNKS),
+        replies[0].content,
+    ]
     # Under the streamed id, so LangGraph does not send the answer a second time.
     assert update["messages"][0].id == STREAM_ID
-    assert len(replies) == 1
-    assert "Answered by `some-model`" in answer_text(replies[0])
 
 
 def test_missing_prompt_asks_for_one(model_calls, replies):
-    """A bare `llm` explains the usage and calls no model."""
+    """A bare `llm` explains the usage in a message and calls no model."""
     update = asyncio.run(llm_node(_state(""), runtime=_runtime(None)))
     assert model_calls == []
-    assert USAGE in answer_text(replies[0])
-    assert update == {}
+    assert USAGE in message_text(replies[0])
+    assert [message.content for message in update["messages"]] == [replies[0].content]
 
 
-def test_sdk_refusal_is_explained_in_the_answer(monkeypatch, replies):
-    """An SDK error buried in a client error surfaces with the SDK's own words."""
+def test_sdk_refusal_fails_the_task_in_the_sdk_words(monkeypatch, replies):
+    """An SDK error buried in a client error becomes the reason, in the SDK's own words."""
     refusal = AionAuthenticationError("Unable to obtain an Aion API token.")
     wrapped = ConnectionError("Connection error.")
     wrapped.__cause__ = refusal
-    monkeypatch.setattr(llm_module, "aion_chat_openai", lambda model, **kwargs: _FakeChat(wrapped))
 
-    update = asyncio.run(llm_node(_state("hi"), runtime=_runtime({"model": "some-model"})))
+    reason = _failure(monkeypatch, wrapped)
 
-    assert str(refusal) in answer_text(replies[0])
-    assert update == {}
+    assert str(refusal) in reason
+    assert replies == []
 
 
 def test_model_failure_names_the_configuration_field(monkeypatch, replies):
-    """Any other failure points at the `model` field instead of failing the task."""
-    monkeypatch.setattr(
-        llm_module, "aion_chat_openai", lambda model, **kwargs: _FakeChat(RuntimeError("boom"))
-    )
+    """Any other failure fails the task with a reason that points at the `model` field."""
+    reason = _failure(monkeypatch, RuntimeError("boom"), model="gone-model")
 
-    asyncio.run(llm_node(_state("hi"), runtime=_runtime({"model": "gone-model"})))
-
-    answer = answer_text(replies[0])
-    assert "gone-model" in answer and "`model`" in answer
+    assert "gone-model" in reason and "`model`" in reason
+    assert replies == []
 
 
 class _ServiceError(Exception):
@@ -141,26 +149,22 @@ class _ServiceError(Exception):
 
 
 def test_service_refusal_is_quoted_with_advice_for_its_code(monkeypatch, replies):
-    """The service's own words reach the answer, and the advice follows its code."""
+    """The service's own words reach the reason, and the advice follows its code."""
     error = _ServiceError("AgentIdentity d-1 lacks model.execute on Organization o-1.", "model_authorization_denied")
-    monkeypatch.setattr(llm_module, "aion_chat_openai", lambda model, **kwargs: _FakeChat(error))
 
-    asyncio.run(llm_node(_state("hi"), runtime=_runtime({"model": "some-model"})))
+    reason = _failure(monkeypatch, error)
 
-    answer = answer_text(replies[0])
-    assert error.message in answer
-    assert llm_module.ADVICE["model_authorization_denied"] in answer
-    assert "Resources > Models" not in answer
+    assert error.message in reason
+    assert llm_module.ADVICE["model_authorization_denied"] in reason
+    assert "Resources > Models" not in reason
 
 
 def test_unknown_code_gets_every_likely_cause(monkeypatch, replies):
     """A code the sample does not know still names both fixes and the error table."""
     error = _ServiceError("Something new went wrong.", "something_new")
-    monkeypatch.setattr(llm_module, "aion_chat_openai", lambda model, **kwargs: _FakeChat(error))
 
-    asyncio.run(llm_node(_state("hi"), runtime=_runtime({"model": "some-model"})))
+    reason = _failure(monkeypatch, error)
 
-    answer = answer_text(replies[0])
-    assert error.message in answer
-    assert "`model.execute`" in answer and "`model`" in answer
-    assert llm_module.MODEL_SERVICE_DOCS in answer
+    assert error.message in reason
+    assert "`model.execute`" in reason and "`model`" in reason
+    assert llm_module.MODEL_SERVICE_DOCS in reason

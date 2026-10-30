@@ -63,8 +63,8 @@ async def task_handler(ctx: AionInvocationContext, argument: str) -> AsyncGenera
 
     Everything above this uses the thread helpers and lets the server assemble
     the response. When you need full control — your own history, artifacts and
-    metadata on the task — put a Task in the outbox. The Task is what this
-    command demonstrates; the explanation sent beside it is a text artifact.
+    metadata on the task — put a Task in the outbox. The Task, with its
+    artifact, is the result; the explanation sent beside it is a message.
     """
     thread = Thread.from_context(ctx.aion_runtime_context)
     task_id, context_id = _inbound_ids(ctx)
@@ -91,12 +91,10 @@ async def task_handler(ctx: AionInvocationContext, argument: str) -> AsyncGenera
     )
 
     await thread.reply(
-        text_artifact(
-            with_footer(
-                "task",
-                "An explicit A2A Task is on its way out, carrying its own history, one "
-                "artifact and custom metadata.",
-            )
+        with_footer(
+            "task",
+            "An explicit A2A Task is on its way out, carrying its own history, one "
+            "artifact and custom metadata.",
         )
     )
 
@@ -114,9 +112,9 @@ async def message_handler(ctx: AionInvocationContext, argument: str) -> AsyncGen
     """Answer with a bare A2A Message.
 
     A Message is the right response when there is no work to track — no task
-    lifecycle, just a reply bound to the same context. The Message is what
-    this command demonstrates; the explanation sent beside it is a text
-    artifact.
+    lifecycle, just a reply bound to the same context. The explanation is a
+    message; the outbox Message is the answer, the one the server copies
+    into ``aion:assistant-answer``.
     """
     thread = Thread.from_context(ctx.aion_runtime_context)
     task_id, context_id = _inbound_ids(ctx)
@@ -130,12 +128,10 @@ async def message_handler(ctx: AionInvocationContext, argument: str) -> AsyncGen
     )
 
     await thread.reply(
-        text_artifact(
-            with_footer(
-                "message",
-                "An explicit A2A Message is on its way out — same context, no task "
-                "lifecycle attached.",
-            )
+        with_footer(
+            "message",
+            "An explicit A2A Message is on its way out — same context, no task "
+            "lifecycle attached.",
         )
     )
 

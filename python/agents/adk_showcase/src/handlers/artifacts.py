@@ -7,7 +7,7 @@ import uuid
 
 from a2a.types import Artifact, Part
 from aion.adk.authoring.invocation import AionInvocationContext, Thread
-from aion.core.a2a import data_artifact, file_artifact, text_artifact, url_artifact
+from aion.core.a2a import data_artifact, file_artifact, url_artifact
 
 from src.replies import with_footer
 
@@ -39,8 +39,9 @@ async def artifact_handler(ctx: AionInvocationContext, argument: str) -> None:
     into the metadata of the artifact the client receives.
 
     ``text_artifact(text)`` builds the same shape for plain text — one text
-    part, a fresh id and the name ``text`` — and is how every other answer of
-    this agent is sent, the explanation below included.
+    part, a fresh id and the name ``text`` — and is how the commands whose
+    answer is text send it. The explanation below describes the result
+    rather than being one, so it is a message.
     """
     thread = Thread.from_context(ctx.aion_runtime_context)
 
@@ -52,17 +53,15 @@ async def artifact_handler(ctx: AionInvocationContext, argument: str) -> None:
     await thread.reply(artifact, metadata=HAND_BUILT_METADATA)
 
     await thread.reply(
-        text_artifact(
-            with_footer(
-                "artifact",
-                f"The `{HAND_BUILT_NAME}` artifact, id `{artifact.artifact_id}`, holds one "
-                "text part and the metadata `showcase.kind: hand-built`.",
-                "",
-                "Any artifact an agent sends is the task's result, whatever it holds. "
-                "`text_artifact(text)` is the short way to build one for text: one text "
-                "part, a fresh id and the name `text`. Every other answer of this agent, "
-                "this one included, is sent that way.",
-            )
+        with_footer(
+            "artifact",
+            f"The `{HAND_BUILT_NAME}` artifact, id `{artifact.artifact_id}`, holds one "
+            "text part and the metadata `showcase.kind: hand-built`.",
+            "",
+            "Any artifact an agent sends is the task's result, whatever it holds. "
+            "`text_artifact(text)` is the short way to build one for text: one text "
+            "part, a fresh id and the name `text`. This explanation only describes "
+            "the result, so it is a message.",
         )
     )
 
@@ -71,7 +70,8 @@ async def file_handler(ctx: AionInvocationContext, argument: str) -> None:
     """Send the same kind of attachment twice: inline bytes, then a URL.
 
     Both go through the ADK artifact service, which stores the part and emits
-    an event carrying the artifact delta. The explanation is a text artifact.
+    an event carrying the artifact delta. The files are the task's result;
+    the explanation after them is a message.
     """
     thread = Thread.from_context(ctx.aion_runtime_context)
 
@@ -83,18 +83,16 @@ async def file_handler(ctx: AionInvocationContext, argument: str) -> None:
     )
 
     await thread.reply(
-        text_artifact(
-            with_footer(
-                "file",
-                "Two file artifacts: `units.csv` carries its bytes inline, "
-                "`rfc9110.txt` is a reference your client resolves itself.",
-            )
+        with_footer(
+            "file",
+            "Two file artifacts: `units.csv` carries its bytes inline, "
+            "`rfc9110.txt` is a reference your client resolves itself.",
         )
     )
 
 
 async def data_handler(ctx: AionInvocationContext, argument: str) -> None:
-    """Send a structured result rather than prose, then explain it as text."""
+    """Send a structured result rather than prose, then explain it in a message."""
     thread = Thread.from_context(ctx.aion_runtime_context)
 
     payload = {
@@ -105,12 +103,10 @@ async def data_handler(ctx: AionInvocationContext, argument: str) -> None:
     await thread.reply(data_artifact(payload, name="totals"))
 
     await thread.reply(
-        text_artifact(
-            with_footer(
-                "data",
-                "That artifact holds structured data, not text:",
-                json.dumps(payload, indent=2),
-            )
+        with_footer(
+            "data",
+            "That artifact holds structured data, not text:",
+            json.dumps(payload, indent=2),
         )
     )
 
@@ -122,7 +118,7 @@ async def composite_handler(ctx: AionInvocationContext, argument: str) -> None:
     versions them by filename: saving ``story.txt`` again does not extend the
     first one, it stores version 2 beside it. Use versions when a result is
     produced in successive drafts, and a single artifact when it is finished.
-    The explanation is a text artifact.
+    The file is the task's result; the explanation after it is a message.
     """
     thread = Thread.from_context(ctx.aion_runtime_context)
 
@@ -134,16 +130,14 @@ async def composite_handler(ctx: AionInvocationContext, argument: str) -> None:
     )
 
     await thread.reply(
-        text_artifact(
-            with_footer(
-                "composite",
-                "`story.txt` was saved twice, so the artifact service now holds two "
-                "versions of it: the second save stored version 2 rather than "
-                "extending version 1.",
-                "",
-                "The artifact service owns storage here, so versioning is how you say "
-                "'here is more' — send the same name again and the client can still "
-                "reach what came before.",
-            )
+        with_footer(
+            "composite",
+            "`story.txt` was saved twice, so the artifact service now holds two "
+            "versions of it: the second save stored version 2 rather than "
+            "extending version 1.",
+            "",
+            "The artifact service owns storage here, so versioning is how you say "
+            "'here is more' — send the same name again and the client can still "
+            "reach what came before.",
         )
     )

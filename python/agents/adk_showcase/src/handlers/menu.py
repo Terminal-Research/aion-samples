@@ -11,10 +11,10 @@ from src.replies import with_footer
 INTRO = (
     "I am a showcase agent. Every answer below is written by the agent itself, "
     "so what you see is platform behaviour rather than model output — except "
-    "`llm`, where a model answers through the platform's model service. An "
-    "answer is the task's result, so it arrives as a text artifact rather than "
-    "as a message; send `card` when you want to see the rich-card rendering "
-    "instead."
+    "`llm`, where a model answers through the platform's model service. What "
+    "a command produces is the task's result, an artifact — a text artifact "
+    "when the answer is text — and text around a result is a message; send "
+    "`card` when you want to see the rich-card rendering instead."
 )
 
 DEFAULT_TITLE = "Aion Showcase — ADK"

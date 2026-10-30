@@ -31,7 +31,7 @@ async def stream_handler(ctx: AionInvocationContext, argument: str) -> None:
         "the answer once rather than a pile of fragments.",
         "",
         "This is the only command that streams text the agent already had: "
-        "every other answer is one `thread.reply(text_artifact(text))` call. "
+        "every other answer that is text is one `thread.reply(text_artifact(text))` call. "
         "The `llm` command streams too, but those chunks are an `LlmAgent`'s "
         "events.",
     )
@@ -68,21 +68,20 @@ async def react_handler(ctx: AionInvocationContext, argument: str) -> None:
 
     Reactions target a provider message, so they need an inbound event carrying
     a context id and a message id — that is, delivery through a distribution.
-    Over a direct A2A call there is no provider message to react to. Either
-    way the explanation is the task's result, a text artifact.
+    Over a direct A2A call there is no provider message to react to, so the
+    turn only says so, in a message: nothing was done. After a reaction, the
+    report of what was done is the task's result, a text artifact.
     """
     thread = Thread.from_context(ctx.aion_runtime_context)
 
     if thread.message is None or ctx.aion_runtime_context.event is None:
         await thread.reply(
-            text_artifact(
-                with_footer(
-                    "react",
-                    "This turn did not arrive through a distribution, so there is no "
-                    "provider message to react to. Send `react` from a connected "
-                    "channel and a thumbs-up will appear on your message and then "
-                    "disappear.",
-                )
+            with_footer(
+                "react",
+                "This turn did not arrive through a distribution, so there is no "
+                "provider message to react to. Send `react` from a connected "
+                "channel and a thumbs-up will appear on your message and then "
+                "disappear.",
             )
         )
         return
@@ -105,9 +104,9 @@ async def metadata_handler(ctx: AionInvocationContext, argument: str) -> None:
     """Attach custom metadata to a message and to an artifact.
 
     Keys beginning with ``aion:`` are reserved for the platform; anything else
-    travels untouched and comes back on the event you receive. The message is
-    what this command demonstrates, so it stays a message; the explanation
-    after it is the task's result, a text artifact.
+    travels untouched and comes back on the event you receive. The data
+    artifact is the task's result; the message that carries metadata and the
+    explanation after both are messages.
     """
     thread = Thread.from_context(ctx.aion_runtime_context)
 
@@ -121,12 +120,10 @@ async def metadata_handler(ctx: AionInvocationContext, argument: str) -> None:
     )
 
     await thread.reply(
-        text_artifact(
-            with_footer(
-                "metadata",
-                "Two events went out with custom metadata: one message and one data "
-                "artifact. Inspect them in the raw A2A stream — metadata is preserved "
-                "verbatim, except for keys under the reserved `aion:` prefix.",
-            )
+        with_footer(
+            "metadata",
+            "Two events went out with custom metadata: one message and one data "
+            "artifact. Inspect them in the raw A2A stream — metadata is preserved "
+            "verbatim, except for keys under the reserved `aion:` prefix.",
         )
     )
