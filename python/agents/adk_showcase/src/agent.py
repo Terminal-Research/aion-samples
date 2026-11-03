@@ -19,8 +19,10 @@ import src.api  # registers the /showcase routes with the server
 from src.commands import parse_input
 from src.handlers import (
     answer_handler,
+    answered_question,
     artifact_handler,
     ask_handler,
+    attachment_handler,
     card_handler,
     composite_handler,
     config_handler,
@@ -29,13 +31,14 @@ from src.handlers import (
     fail_handler,
     file_handler,
     http_handler,
-    is_awaiting_answer,
     llm_handler,
     menu_handler,
     message_handler,
     metadata_handler,
+    post_handler,
     progress_handler,
     react_handler,
+    sections_handler,
     stream_handler,
     task_handler,
     thinking_handler,
@@ -44,6 +47,7 @@ from src.handlers import (
 HANDLERS: dict[str, Callable] = {
     "help": menu_handler,
     "stream": stream_handler,
+    "sections": sections_handler,
     "llm": llm_handler,
     "thinking": thinking_handler,
     "card": card_handler,
@@ -53,12 +57,14 @@ HANDLERS: dict[str, Callable] = {
     "composite": composite_handler,
     "ask": ask_handler,
     "react": react_handler,
+    "post": post_handler,
     "metadata": metadata_handler,
     "progress": progress_handler,
     "task": task_handler,
     "message": message_handler,
     "fail": fail_handler,
     "context": context_handler,
+    "attachment": attachment_handler,
     "config": config_handler,
     "http": http_handler,
 }
@@ -92,15 +98,14 @@ class ShowcaseAgent(BaseAgent):
         self,
         ctx: AionInvocationContext,
     ) -> AsyncGenerator[Event, None]:
-        text = _inbound_text(ctx)
-
-        # An open question takes precedence: this turn carries its answer, not
-        # a new command. ADK ends the turn when it asks, so session state is
-        # what links the two turns together.
-        if is_awaiting_answer(ctx):
-            async for event in answer_handler(ctx, text):
-                yield event
+        # A turn that resumes `ask` carries the answer to the call the run
+        # paused on, not a new command.
+        answer = answered_question(ctx)
+        if answer is not None:
+            await answer_handler(ctx, answer)
             return
+
+        text = _inbound_text(ctx)
 
         parsed = parse_input(text)
         if parsed.command is None:
@@ -110,8 +115,9 @@ class ShowcaseAgent(BaseAgent):
         # Every handler takes (context, argument); a handler that accepts no
         # argument ignores it. The one thing dispatch has to tell apart is the
         # shape of what comes back: a handler that only talks through `Thread`
-        # is a coroutine to await, while one that must write session state or
-        # fill the A2A outbox is an async generator of ADK events to forward.
+        # is a coroutine to await, while one that must yield an ADK event of
+        # its own — a long-running call, the A2A outbox — is an async
+        # generator of events to forward.
         result = HANDLERS[parsed.command.key](ctx, parsed.argument)
         if inspect.isasyncgen(result):
             async for event in result:

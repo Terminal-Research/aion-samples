@@ -1,65 +1,84 @@
-"""Human-in-the-loop, the ADK way: end the turn, remember, pick up next turn."""
+"""Human-in-the-loop, the ADK way: pause on a long-running call, resume with its answer."""
 
 from __future__ import annotations
 
+import json
+import uuid
 from collections.abc import AsyncGenerator
+from typing import Optional
 
 from aion.adk.authoring.invocation import AionInvocationContext, Thread
 from aion.core.a2a import text_artifact
 from google.adk.events import Event
-from google.adk.events.event_actions import EventActions
+from google.genai import types
 
 from src.replies import with_footer
 
-AWAITING_KEY = "showcase.awaiting_environment"
-"""Session-state flag marking that the last turn asked a question."""
+REQUEST_INPUT = "adk_request_input"
+"""The function ADK's own ``request_input`` tool calls to ask the user."""
 
-QUESTION = "Before I continue I need one detail: which environment should I use?"
-"""The question `ask` leaves open for the next turn."""
-
-
-def is_awaiting_answer(ctx: AionInvocationContext) -> bool:
-    """Return True when the previous turn left a question open."""
-    return bool(ctx.session.state.get(AWAITING_KEY))
+QUESTION = "Which environment should I use?"
+"""The question `ask` waits on, as the task's input-required status shows it."""
 
 
 async def ask_handler(ctx: AionInvocationContext, argument: str) -> AsyncGenerator[Event, None]:
-    """Ask for the missing detail and record that we are waiting for it.
+    """Say what is about to happen, then pause the run on the question.
 
-    The turn ends here: an ADK agent answers and returns, it does not park
-    mid-run. What carries the conversation to the next turn is session state,
-    written through ``EventActions(state_delta=...)`` — everything in that
-    delta is visible to the next invocation, and the session is keyed by the
-    conversation's context id.
-
-    The question is a message: it is what the agent says while it waits for
-    input, not a result. Its explanation travels in the same message, so the
-    turn says one thing.
+    An ADK run pauses on a long-running function call: the agent makes the
+    call, marks it in ``long_running_tool_ids`` and returns, and the answer
+    arrives later as the call's function response. The call here is the one
+    ADK's ``request_input`` tool makes, ``adk_request_input`` with the
+    question as its ``message``. The server keeps the task waiting in the
+    input-required state with the question as its status message, and turns
+    the user's reply into the function response the call waits for. The
+    explanation sent before the call is a message.
     """
     thread = Thread.from_context(ctx.aion_runtime_context)
 
     await thread.reply(
         with_footer(
             "ask",
-            QUESTION,
-            "",
-            "Reply with anything. This turn is finished — the answer arrives as a "
-            "new turn, and session state is what tells me a question is open.",
+            "I need one detail before I continue, so the task is about to wait in "
+            "the input-required state, with the question as its status message. "
+            "Reply with anything — the run picks up from the same call afterwards.",
         )
     )
 
-    # AWAITING_KEY is this sample's own key; the delta is what the next
-    # invocation of this session will see.
+    call_id = f"adk-{uuid.uuid4()}"
     yield Event(
-        author="agent",
-        content=None,
-        partial=False,
-        actions=EventActions(state_delta={AWAITING_KEY: True}),
+        author=ctx.agent.name,
+        content=types.Content(
+            role="model",
+            parts=[
+                types.Part(
+                    function_call=types.FunctionCall(
+                        id=call_id, name=REQUEST_INPUT, args={"message": QUESTION}
+                    )
+                )
+            ],
+        ),
+        long_running_tool_ids={call_id},
     )
 
 
-async def answer_handler(ctx: AionInvocationContext, answer: str) -> AsyncGenerator[Event, None]:
-    """Consume the answer to the open question and clear the flag.
+def answered_question(ctx: AionInvocationContext) -> Optional[str]:
+    """Return the user's answer when this turn resumes `ask`, or None for any other turn.
+
+    The resumed run gets the reply as its user content: the function
+    response to the call it paused on. A plain-text reply arrives as
+    ``{"result": text}``, a JSON object as that object.
+    """
+    parts = (ctx.user_content.parts if ctx.user_content is not None else None) or []
+    for part in parts:
+        response = part.function_response
+        if response is not None and response.name == REQUEST_INPUT:
+            value = response.response or {}
+            return str(value["result"]) if "result" in value else json.dumps(value)
+    return None
+
+
+async def answer_handler(ctx: AionInvocationContext, answer: str) -> None:
+    """Continue from the question with the answer it waited for.
 
     What the agent does with the answer is the task's result, a text artifact.
     """
@@ -71,17 +90,9 @@ async def answer_handler(ctx: AionInvocationContext, answer: str) -> AsyncGenera
                 "ask",
                 f'Got it — continuing with "{answer.strip() or "no answer given"}".',
                 "",
-                "The previous turn ended after asking. What matched your answer to "
-                "the open question is session state: the flag it wrote was still there "
-                "when this turn started, because the session is keyed by the "
-                "conversation's context id.",
+                "The run did not start over: it resumed in the invocation that asked, "
+                "and ADK handed your reply to the call it paused on as that call's "
+                "function response.",
             )
         )
-    )
-
-    yield Event(
-        author="agent",
-        content=None,
-        partial=False,
-        actions=EventActions(state_delta={AWAITING_KEY: False}),
     )

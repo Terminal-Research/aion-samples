@@ -1,4 +1,4 @@
-"""Artifact demonstrations: hand-built, inline files, remote files, data, versioning."""
+"""Artifact demonstrations: hand-built, inline files, remote files, data, chunked delivery."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import json
 import uuid
 
 from a2a.types import Artifact, Part
-from aion.adk.authoring.invocation import AionInvocationContext, Thread
+from aion.adk.authoring.invocation import AionInvocationContext, Thread, emit_artifact, get_adk_emitter
 from aion.core.a2a import data_artifact, file_artifact, url_artifact
 
 from src.replies import with_footer
@@ -28,29 +28,25 @@ HAND_BUILT_METADATA = {"showcase.kind": "hand-built"}
 
 
 async def artifact_handler(ctx: AionInvocationContext, argument: str) -> None:
-    """Build an artifact field by field and send it as the task's result.
+    """Send an artifact built field by field, then explain it in a message.
 
-    Any artifact the agent sends is a result of the task, whatever it holds;
-    the server copies no ``aion:assistant-answer`` for a task that has one.
-    This one is assembled by hand: an id the agent chose, a name and one text
-    part. ``thread.reply()`` saves the part to the ADK artifact service and
-    the id and name travel with the event that announces it; the artifact's
-    custom metadata is the ``metadata`` of that call, which the SDK merges
-    into the metadata of the artifact the client receives.
-
-    ``text_artifact(text)`` builds the same shape for plain text — one text
-    part, a fresh id and the name ``text`` — and is how the commands whose
-    answer is text send it. The explanation below describes the result
-    rather than being one, so it is a message.
+    Any artifact the agent sends is part of the task's result, whatever it
+    carries. Building ``a2a.types.Artifact`` directly gives full control over
+    its id, name, parts and metadata, and ``thread.reply()`` publishes it as
+    it is; ``text_artifact()`` builds the common case — one text part, a
+    fresh id, the name ``text`` — and is how the commands whose answer is
+    text send it. The explanation describes the result rather than being
+    one, so it is a message.
     """
     thread = Thread.from_context(ctx.aion_runtime_context)
 
     artifact = Artifact(
         artifact_id=f"hand-built-{uuid.uuid4()}",
         name=HAND_BUILT_NAME,
-        parts=[Part(text="This artifact was built by hand: its own id, a name and one text part.")],
+        parts=[Part(text="This artifact was built by hand: its own id, a name, one text part and custom metadata.")],
+        metadata=HAND_BUILT_METADATA,
     )
-    await thread.reply(artifact, metadata=HAND_BUILT_METADATA)
+    await thread.reply(artifact)
 
     await thread.reply(
         with_footer(
@@ -69,9 +65,10 @@ async def artifact_handler(ctx: AionInvocationContext, argument: str) -> None:
 async def file_handler(ctx: AionInvocationContext, argument: str) -> None:
     """Send the same kind of attachment twice: inline bytes, then a URL.
 
-    Both go through the ADK artifact service, which stores the part and emits
-    an event carrying the artifact delta. The files are the task's result;
-    the explanation after them is a message.
+    Inline bytes travel in the event itself and suit small results. A URL
+    artifact references a file the client fetches on its own, which is what you
+    want for anything large or already hosted. The files are the task's
+    result; the explanation after them is a message.
     """
     thread = Thread.from_context(ctx.aion_runtime_context)
 
@@ -107,37 +104,56 @@ async def data_handler(ctx: AionInvocationContext, argument: str) -> None:
             "data",
             "That artifact holds structured data, not text:",
             json.dumps(payload, indent=2),
+            "",
+            "A data part is a protobuf `Value`, so a client reads every number in it "
+            "as a float: `120` arrives as `120.0`.",
         )
     )
 
 
 async def composite_handler(ctx: AionInvocationContext, argument: str) -> None:
-    """Save one artifact name twice and let the store keep both versions.
+    """Build one artifact out of several appended chunks.
 
-    Artifacts go through the ADK artifact service, which owns their storage and
-    versions them by filename: saving ``story.txt`` again does not extend the
-    first one, it stores version 2 beside it. Use versions when a result is
-    produced in successive drafts, and a single artifact when it is finished.
-    The file is the task's result; the explanation after it is a message.
+    All chunks share an artifact id. ``append=True`` adds to what was already
+    sent, and ``is_last_chunk=True`` closes the artifact — the same shape a
+    long generated document takes as it is produced. ``emit_artifact`` takes
+    the event emitter of the running invocation, which ``get_adk_emitter()``
+    returns. The file is the task's result; the explanation after it is a
+    message.
     """
     thread = Thread.from_context(ctx.aion_runtime_context)
+    emitter = get_adk_emitter()
 
-    await thread.reply(
-        file_artifact(b"Draft one.", mime_type="text/plain", name="story.txt")
-    )
-    await thread.reply(
-        file_artifact(b"Draft one. Draft two.", mime_type="text/plain", name="story.txt")
-    )
+    if emitter is None:
+        await thread.reply(
+            with_footer(
+                "composite",
+                "No event emitter is available outside an invocation, so there is "
+                "nothing to append to.",
+            )
+        )
+        return
+
+    artifact_id = str(uuid.uuid4())
+    chapters = ("Chapter one. ", "Chapter two. ", "Chapter three.")
+    for index, chapter in enumerate(chapters):
+        await emit_artifact(
+            emitter,
+            ctx,
+            file_artifact(
+                chapter.encode(),
+                mime_type="text/plain",
+                name="story.txt",
+                artifact_id=artifact_id,
+            ),
+            append=index > 0,
+            is_last_chunk=index == len(chapters) - 1,
+        )
 
     await thread.reply(
         with_footer(
             "composite",
-            "`story.txt` was saved twice, so the artifact service now holds two "
-            "versions of it: the second save stored version 2 rather than "
-            "extending version 1.",
-            "",
-            "The artifact service owns storage here, so versioning is how you say "
-            "'here is more' — send the same name again and the client can still "
-            "reach what came before.",
+            f"`story.txt` arrived as {len(chapters)} chunks sharing one artifact id. "
+            "The first opened it, the rest appended, and the last one closed it.",
         )
     )

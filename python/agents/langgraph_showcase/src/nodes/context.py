@@ -1,4 +1,4 @@
-"""What the agent knows about the conversation it is in."""
+"""What the agent knows about the conversation it is in, and what it was sent."""
 
 from __future__ import annotations
 
@@ -49,6 +49,62 @@ async def context_node(state: AgentState, *, runtime: Runtime[AionRuntimeContext
                 "grows by your message, because turns sharing a context id share "
                 "state. This answer is not counted, and neither are thoughts: both "
                 "are artifacts of the task, not messages.",
+            )
+        )
+    )
+    return {}
+
+
+def _describe(part) -> str:
+    """One line for a file part: its name, its media type and what it holds."""
+    if part.WhichOneof("content") == "raw":
+        held = f"{len(part.raw)} bytes inline"
+    else:
+        held = f"a link, {part.url}"
+    return f"  {part.filename or '(no name)'}  {part.media_type or 'no media type'}, {held}"
+
+
+async def attachment_node(state: AgentState, *, runtime: Runtime[AionRuntimeContext]) -> dict:
+    """Describe the files attached to the inbound message.
+
+    Every part of the inbound message reaches the agent in
+    ``context.inbox.message``, the A2A message as the server received it; the
+    ``messages`` state holds the same files as file blocks for a model. A file
+    is a part holding inline bytes (``raw``) or a link (``url``), with its
+    name and media type beside it. With a file storage backend configured,
+    the server stores inline bytes before the agent runs, so the agent sees a
+    link; without one the bytes arrive as they were sent. The description is
+    the task's result, a text artifact; a turn without a file says so in a
+    message.
+    """
+    thread = Thread.from_context(runtime.context)
+
+    message = runtime.context.inbox.message if runtime.context.inbox is not None else None
+    files = [
+        part for part in (message.parts if message is not None else [])
+        if part.WhichOneof("content") in ("raw", "url")
+    ]
+
+    if not files:
+        reply = await thread.reply(
+            with_footer(
+                "attachment",
+                "Attach a file to `attachment` and I will describe it: a file reaches "
+                "the agent as a part of your message, inline bytes or a link.",
+            )
+        )
+        return {"messages": [reply]}
+
+    await thread.reply(
+        text_artifact(
+            with_footer(
+                "attachment",
+                f"Your message carried {len(files)} file(s):",
+                *[_describe(part) for part in files],
+                "",
+                "With a file storage backend configured, the server stores inline "
+                "bytes before the agent runs, so the agent sees a link instead; "
+                "without one the bytes arrive as they were sent.",
             )
         )
     )

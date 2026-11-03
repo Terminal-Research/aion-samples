@@ -19,6 +19,7 @@ from src.nodes import (
     artifact_node,
     ask_node,
     ask_wait_node,
+    attachment_node,
     card_node,
     composite_node,
     config_node,
@@ -31,8 +32,10 @@ from src.nodes import (
     menu_node,
     message_node,
     metadata_node,
+    post_node,
     progress_node,
     react_node,
+    sections_node,
     stream_node,
     task_node,
     thinking_node,
@@ -60,6 +63,7 @@ def create_graph() -> StateGraph:
 
     workflow.add_node("help", menu_node)
     workflow.add_node("stream", stream_node)
+    workflow.add_node("sections", sections_node)
     workflow.add_node("llm", llm_node)
     workflow.add_node("thinking", thinking_node)
     workflow.add_node("card", card_node)
@@ -70,12 +74,14 @@ def create_graph() -> StateGraph:
     workflow.add_node("ask", ask_node)
     workflow.add_node("ask_wait", ask_wait_node)
     workflow.add_node("react", react_node)
+    workflow.add_node("post", post_node)
     workflow.add_node("metadata", metadata_node)
     workflow.add_node("progress", progress_node)
     workflow.add_node("task", task_node)
     workflow.add_node("message", message_node)
     workflow.add_node("fail", fail_node)
     workflow.add_node("context", context_node)
+    workflow.add_node("attachment", attachment_node)
     workflow.add_node("config", config_node)
     workflow.add_node("http", http_node)
 
@@ -84,6 +90,7 @@ def create_graph() -> StateGraph:
 
     workflow.add_edge("help", END)
     workflow.add_edge("stream", END)
+    workflow.add_edge("sections", END)
     workflow.add_edge("llm", END)
     workflow.add_edge("thinking", END)
     workflow.add_edge("card", END)
@@ -92,12 +99,14 @@ def create_graph() -> StateGraph:
     workflow.add_edge("data", END)
     workflow.add_edge("composite", END)
     workflow.add_edge("react", END)
+    workflow.add_edge("post", END)
     workflow.add_edge("metadata", END)
     workflow.add_edge("progress", END)
     workflow.add_edge("task", END)
     workflow.add_edge("message", END)
     workflow.add_edge("fail", END)
     workflow.add_edge("context", END)
+    workflow.add_edge("attachment", END)
     workflow.add_edge("config", END)
     workflow.add_edge("http", END)
 

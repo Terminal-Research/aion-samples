@@ -2,20 +2,28 @@
 
 import asyncio
 import inspect
+import re
 from types import SimpleNamespace
 
 import pytest
-from a2a.types import Artifact
+from a2a.types import Artifact, Message, Part, Role
 from aion.adk.authoring.invocation import Thread
+from aion.core.a2a import A2AInbox
 from aion.core.agent.invocation.card import Card
+from aion.core.exceptions import TaskFailedError
 from aion.core.runtime import AionRuntimeContext
+from google.genai import types
 
 from src.agent import HANDLERS, _inbound_text, create_agent
-from src.commands import COMMANDS, parse_command
-from src.handlers import answer_handler
+from src.commands import COMMANDS, COMMANDS_BY_KEY, parse_command
+from src.handlers import answer_handler, answered_question
+from src.handlers import artifacts as artifacts_module
+from src.handlers import messaging as messaging_module
 from src.handlers import tasks as tasks_module
 from src.handlers.artifacts import HAND_BUILT_METADATA, HAND_BUILT_NAME
-from src.handlers.hitl import QUESTION
+from src.handlers.hitl import QUESTION, REQUEST_INPUT
+from src.handlers.messaging import POSTED
+from src.handlers.tasks import FAIL_REASON
 
 SENT = {
     # The answer is text: one text artifact.
@@ -26,11 +34,11 @@ SENT = {
     "progress": ["text"],
     # The answer is streamed.
     "stream": ["stream"],
+    "sections": ["stream", "stream", "message"],
     # The result is something else; the explanation beside it is a message.
     "artifact": ["artifact", "message"],
     "file": ["artifact", "artifact", "message"],
     "data": ["artifact", "message"],
-    "composite": ["artifact", "artifact", "message"],
     "metadata": ["message", "artifact", "message"],
     "task": ["message"],
     "message": ["message"],
@@ -39,9 +47,13 @@ SENT = {
     "llm": ["message"],
     "config": ["message"],
     "react": ["message"],
-    # Messages by nature: a question, and the explanation of a failure.
+    "composite": ["message"],
+    "attachment": ["message"],
+    # Messages by nature: what `ask` says before it waits, the explanation of a
+    # failure, and the posted message beside its explanation.
     "ask": ["message"],
     "fail": ["message"],
+    "post": ["message", "message"],
 }
 """What each command hands to ``thread.reply()`` on a direct local turn, in order."""
 
@@ -85,33 +97,52 @@ def test_inbound_text_is_empty_without_a_runtime_context():
     assert _inbound_text(_Ctx()) == ""
 
 
-def _ctx() -> SimpleNamespace:
+def _ctx(runtime: AionRuntimeContext | None = None, user_content=None) -> SimpleNamespace:
     """An invocation context for a direct local turn: no inbound message, no environment."""
     return SimpleNamespace(
-        aion_runtime_context=AionRuntimeContext(),
+        aion_runtime_context=runtime or AionRuntimeContext(),
+        agent=SimpleNamespace(name="showcase"),
+        user_content=user_content,
         session=SimpleNamespace(id="session-1", state={}, events=[]),
     )
 
 
 @pytest.fixture
 def sent(monkeypatch):
-    """Capture what the handlers pass to ``thread.reply()``, with its metadata."""
+    """Capture what the handlers pass to ``thread.reply()`` and ``thread.post()``, with its metadata."""
     captured: list[tuple[object, dict | None]] = []
 
     async def fake_reply(self, content, *, metadata=None):
         captured.append((content, metadata))
 
+    async def fake_post(self, content, *, target=None, metadata=None):
+        captured.append((content, {"via": "post", "target": target}))
+
     async def no_sleep(seconds):
         pass
 
     monkeypatch.setattr(Thread, "reply", fake_reply)
+    monkeypatch.setattr(Thread, "post", fake_post)
     monkeypatch.setattr(tasks_module.asyncio, "sleep", no_sleep)
+    monkeypatch.setattr(messaging_module, "TYPEWRITER_DELAY_SECONDS", 0)
     return captured
 
 
-def _run(handler, argument: str = "") -> list:
+@pytest.fixture
+def thoughts(monkeypatch) -> list[str]:
+    """Capture what the handlers pass to ``thread.thinking()``."""
+    captured: list[str] = []
+
+    async def fake_thinking(self, content, *, metadata=None):
+        captured.append(content)
+
+    monkeypatch.setattr(Thread, "thinking", fake_thinking)
+    return captured
+
+
+def _run(handler, argument: str = "", ctx: SimpleNamespace | None = None) -> list:
     """Run one handler to the end; return the ADK events it yielded."""
-    result = handler(_ctx(), argument)
+    result = handler(ctx or _ctx(), argument)
 
     async def drain() -> list:
         if inspect.isasyncgen(result):
@@ -155,13 +186,22 @@ def test_each_command_sends_its_result_and_explains_it_in_messages(key, sent):
 
     No handler yields a text event of its own, so nothing is sent twice. Every
     command except `stream`, whose footer is streamed with the answer, names
-    its SDK call in a footer, in the text artifact or in a message.
+    its SDK call in a footer, in the text artifact or in a message. `fail`
+    raises once its explanation is out.
     """
-    events = _run(HANDLERS[key])
+    if key == "fail":
+        with pytest.raises(TaskFailedError):
+            _run(HANDLERS[key])
+        events = []
+    else:
+        events = _run(HANDLERS[key])
 
     contents = [content for content, _ in sent]
     assert [_kind(content) for content in contents] == SENT[key]
-    assert all(event.content is None for event in events), f"{key} yielded a text event"
+    texts_yielded = [
+        part.text for event in events if event.content for part in event.content.parts if part.text
+    ]
+    assert not texts_yielded, f"{key} yielded a text event"
 
     if key != "stream":
         texts = [content if isinstance(content, str) else content.parts[0].text
@@ -181,20 +221,137 @@ def test_the_answer_to_an_open_question_is_a_text_artifact(sent):
 
 
 def test_artifact_sends_a_hand_built_artifact(sent):
-    """`artifact` sends its own artifact, with its metadata, before the message explaining it."""
+    """`artifact` sends its own artifact, metadata inside it, before the message explaining it."""
     _run(HANDLERS["artifact"])
 
     (built, metadata), (explanation, _) = sent
     assert isinstance(built, Artifact) and built.name == HAND_BUILT_NAME
     assert built.artifact_id and len(built.parts) == 1 and built.parts[0].text
-    assert metadata == HAND_BUILT_METADATA
+    assert dict(built.metadata) == HAND_BUILT_METADATA
+    assert metadata is None
     assert isinstance(explanation, str)
     assert built.artifact_id in explanation
 
 
-def test_ask_sends_the_question_and_its_explanation_in_one_message(sent):
-    _run(HANDLERS["ask"])
+def test_ask_explains_then_pauses_on_a_long_running_call(sent):
+    """The explanation is a message; the question is the `adk_request_input` call the run waits on."""
+    (event,) = _run(HANDLERS["ask"])
 
     (message, _), = sent
-    assert message.startswith(QUESTION)
-    assert "Reply with anything" in message
+    assert QUESTION not in message and "Reply with anything" in message
+    (call,) = event.get_function_calls()
+    assert (call.name, call.args) == (REQUEST_INPUT, {"message": QUESTION})
+    assert event.long_running_tool_ids == {call.id}
+    assert event.author == "showcase"
+
+
+def _resumed(response: dict) -> types.Content:
+    """The user content of a turn that answers the `ask` call."""
+    return types.Content(
+        role="user",
+        parts=[types.Part(function_response=types.FunctionResponse(id="call-1", name=REQUEST_INPUT, response=response))],
+    )
+
+
+def test_the_answer_is_read_from_the_function_response():
+    """Plain text arrives as `result`; any other turn answers no question."""
+    assert answered_question(_ctx(user_content=_resumed({"result": "staging"}))) == "staging"
+    assert answered_question(_ctx(user_content=_resumed({"env": "prod"}))) == '{"env": "prod"}'
+    assert answered_question(_ctx(user_content=types.Content(role="user", parts=[types.Part(text="ask")]))) is None
+    assert answered_question(_ctx()) is None
+
+
+def test_a_resumed_turn_goes_to_the_answer_not_to_a_command(sent):
+    """The reply resumes `ask`, even though its text would not name a command."""
+    ctx = _ctx(user_content=_resumed({"result": "staging"}))
+
+    async def drain():
+        return [event async for event in create_agent()._run_async_impl(ctx)]
+
+    assert asyncio.run(drain()) == []
+    (content, _), = sent
+    assert _is_text_artifact(content) and '"staging"' in content.parts[0].text
+
+
+def test_fail_explains_then_raises_its_reason(sent):
+    with pytest.raises(TaskFailedError) as failure:
+        _run(HANDLERS["fail"])
+
+    assert failure.value.reason == FAIL_REASON
+    (message, _), = sent
+    assert message.endswith(COMMANDS_BY_KEY["fail"].footer())
+
+
+def test_thinking_shares_its_thoughts_before_the_answer(sent, thoughts):
+    _run(HANDLERS["thinking"])
+
+    assert thoughts == ["Looking that up…", "Almost there…"]
+    assert len(sent) == 1
+
+
+def test_sections_streams_twice_around_a_thought(sent, thoughts):
+    _run(HANDLERS["sections"])
+
+    assert thoughts == ["Calling a tool…"]
+    assert [_kind(content) for content, _ in sent] == ["stream", "stream", "message"]
+
+
+def test_post_carries_no_route_and_the_reply_explains_it(sent):
+    _run(HANDLERS["post"])
+
+    (posted, how), (explanation, reply_metadata) = sent
+    assert (posted, how) == (POSTED, {"via": "post", "target": None})
+    assert reply_metadata is None
+    assert "direct A2A call" in explanation
+
+
+def test_composite_appends_three_chunks_to_one_artifact(sent, monkeypatch):
+    emitted: list = []
+    monkeypatch.setattr(artifacts_module, "get_adk_emitter", lambda: emitted.append)
+
+    _run(HANDLERS["composite"])
+
+    published = [event.custom_metadata["aion:output"]["published"] for event in emitted]
+    assert len({chunk["artifact"]["artifact_id"] for chunk in published}) == 1
+    assert [chunk["append"] for chunk in published] == [False, True, True]
+    assert [chunk["last_chunk"] for chunk in published] == [False, False, True]
+    assert [_kind(content) for content, _ in sent] == ["message"]
+
+
+def test_attachment_describes_every_file_of_the_inbound_message(sent):
+    inbound = Message(
+        message_id="m-1",
+        role=Role.ROLE_USER,
+        parts=[
+            Part(text="attachment"),
+            Part(raw=b"date,units\n", filename="units.csv", media_type="text/csv"),
+            Part(url="https://example.com/r.pdf", filename="r.pdf", media_type="application/pdf"),
+        ],
+    )
+
+    _run(HANDLERS["attachment"], ctx=_ctx(AionRuntimeContext(inbox=A2AInbox(message=inbound))))
+
+    (content, _), = sent
+    assert _is_text_artifact(content)
+    text = content.parts[0].text
+    assert "2 file(s)" in text
+    assert "units.csv  text/csv, 11 bytes inline" in text
+    assert "r.pdf  application/pdf, a link, https://example.com/r.pdf" in text
+
+
+def test_a_card_button_lands_on_the_command_it_names(sent):
+    """Every button with an id names a command, and a press resolves to it."""
+    _run(HANDLERS["card"])
+
+    ids = [
+        found
+        for content, _ in sent if isinstance(content, Card)
+        for found in re.findall(r'id="([^"]+)"', content.jsx or "")
+    ]
+    assert ids
+    for action_id in ids:
+        assert parse_command(action_id) is not None
+        pressed = SimpleNamespace(
+            aion_runtime_context=SimpleNamespace(event=SimpleNamespace(payload=SimpleNamespace(action_id=action_id)))
+        )
+        assert _inbound_text(pressed) == action_id

@@ -12,6 +12,9 @@ from langgraph.types import interrupt
 from src.replies import with_footer
 from src.state import AgentState
 
+QUESTION = "Which environment should I use?"
+"""The question `ask` waits on, as the task's input-required status shows it."""
+
 
 def _resumed_text(value: object) -> str:
     """Extract the user's answer from whatever the resume payload carries.
@@ -37,38 +40,39 @@ def _resumed_text(value: object) -> str:
 
 
 async def ask_node(state: AgentState, *, runtime: Runtime[AionRuntimeContext]) -> dict:
-    """Ask the question, and nothing else.
+    """Say what is about to happen, and nothing else.
 
-    The question is a message, not an answer: it explains why the task is
-    about to wait for input, and it stays in the conversation history.
+    The explanation is a message, and it stays in the conversation history.
+    The question itself is not sent here: it is the value of ``interrupt()``
+    in the next node, which the server makes the message of the task's
+    input-required status.
 
-    The question and the wait deliberately live in two nodes. LangGraph replays
-    a node from its first line when the graph resumes, so anything emitted
-    before ``interrupt()`` in the same node would be sent twice. Keep side
-    effects out of the node that interrupts.
+    The explanation and the wait deliberately live in two nodes. LangGraph
+    replays a node from its first line when the graph resumes, so anything
+    emitted before ``interrupt()`` in the same node would be sent twice. Keep
+    side effects out of the node that interrupts.
     """
     thread = Thread.from_context(runtime.context)
 
     reply = await thread.reply(
         with_footer(
             "ask",
-            "Before I continue I need one detail: which environment should I use?",
-            "",
-            "Reply with anything — the task is parked in the input-required state "
-            "until you do, and picks up from the same point afterwards.",
+            "I need one detail before I continue, so the task is about to wait in "
+            "the input-required state, with the question as its status message. "
+            "Reply with anything — the run picks up from the same point afterwards.",
         )
     )
     return {"messages": [reply]}
 
 
 async def ask_wait_node(state: AgentState, *, runtime: Runtime[AionRuntimeContext]) -> dict:
-    """Suspend the run, then answer once the input arrives.
+    """Suspend the run on the question, then answer once the input arrives.
 
     The interrupt value is the question the client sees on the task's
     input-required status. The text sent after the resume is the task's
     answer, so it goes out as a text artifact.
     """
-    answer = _resumed_text(interrupt("Waiting for the environment name"))
+    answer = _resumed_text(interrupt(QUESTION))
 
     thread = Thread.from_context(runtime.context)
 

@@ -63,7 +63,7 @@ tests/          the agent run directly on ADK's in-memory services, no server ne
   server builds no `aion:assistant-answer`. Had the agent yielded the text as an event's
   content instead, the client would have received it as a message, and the server would
   have copied that message into an `aion:assistant-answer`.
-- **Everything else.** Cards, artifacts, thoughts, multi-turn state, reactions,
+- **Everything else.** Cards, artifacts, thoughts, human-in-the-loop, reactions,
   configuration and custom HTTP routes are one import away — the
   [ADK showcase](../adk_showcase/README.md) demonstrates each of them.
 

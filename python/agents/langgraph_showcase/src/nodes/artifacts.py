@@ -117,6 +117,9 @@ async def data_node(state: AgentState, *, runtime: Runtime[AionRuntimeContext]) 
             "data",
             "That artifact holds structured data, not text:",
             json.dumps(payload, indent=2),
+            "",
+            "A data part is a protobuf `Value`, so a client reads every number in it "
+            "as a float: `120` arrives as `120.0`.",
         )
     )
     return {"messages": [reply]}

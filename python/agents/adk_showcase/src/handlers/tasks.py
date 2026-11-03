@@ -9,10 +9,14 @@ from collections.abc import AsyncGenerator
 from a2a.types import Artifact, Message as A2AMessage, Part, Role, Task, TaskState, TaskStatus
 from aion.adk.authoring.invocation import AionInvocationContext, Thread
 from aion.core.a2a import A2AOutbox, text_artifact
+from aion.core.exceptions import TaskFailedError
 from google.adk.events import Event
 from google.adk.events.event_actions import EventActions
 
 from src.replies import with_footer
+
+FAIL_REASON = "Deliberate failure raised by the showcase agent."
+"""The reason `fail` fails its task with, as the caller reads it."""
 
 STEPS = ("Fetching input", "Crunching numbers", "Writing the result")
 
@@ -145,44 +149,25 @@ async def message_handler(ctx: AionInvocationContext, argument: str) -> AsyncGen
     )
 
 
-async def fail_handler(ctx: AionInvocationContext, argument: str) -> AsyncGenerator[Event, None]:
+async def fail_handler(ctx: AionInvocationContext, argument: str) -> None:
     """Finish the task in the failed state, on purpose.
 
     Failure is part of the contract: the caller needs a terminal state it can
-    act on, not a silent stop. A failed task has no result, so nothing here is
-    an artifact: the reason is a message in the failed Task's history, and the
-    explanation of the demonstration is a message too.
+    act on, not a silent stop. ``TaskFailedError`` ends the turn there, and its
+    reason becomes the message of the task's FAILED status — the place A2A
+    gives a status its explanation, the same on the stream, in the unary
+    answer and in a later ``tasks/get``. What the handler sent before raising
+    has already gone out: the explanation is a message, because a failed task
+    has no result.
     """
     thread = Thread.from_context(ctx.aion_runtime_context)
-    task_id, context_id = _inbound_ids(ctx)
-
-    failed = Task(
-        id=task_id,
-        context_id=context_id,
-        status=TaskStatus(state=TaskState.TASK_STATE_FAILED),
-        history=[
-            A2AMessage(
-                message_id=str(uuid.uuid4()),
-                role=Role.ROLE_AGENT,
-                parts=[Part(text="Deliberate failure raised by the showcase agent.")],
-            )
-        ],
-        metadata={"reason": "demonstration"},
-    )
 
     await thread.reply(
         with_footer(
             "fail",
             "This task is ending in the failed state on purpose. The client should "
-            "see a terminal failure, not a hang and not a success.",
+            "see a terminal failure, not a hang and not a success, and the reason "
+            "in the message of the failed status.",
         )
     )
-
-    # `a2a_outbox` is the session-state key the server reads when it builds
-    # the response.
-    yield Event(
-        author="agent",
-        content=None,
-        partial=False,
-        actions=EventActions(state_delta={"a2a_outbox": A2AOutbox(task=failed)}),
-    )
+    raise TaskFailedError(FAIL_REASON)

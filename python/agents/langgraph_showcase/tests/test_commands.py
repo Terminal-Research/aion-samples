@@ -4,6 +4,7 @@ import re
 from pathlib import Path
 
 import pytest
+import yaml
 
 from src.commands import COMMANDS, examples, menu_lines, parse_command, parse_input
 
@@ -102,3 +103,10 @@ def test_the_call_in_the_footer_is_written_in_the_source_file():
         call = re.match(r"[\w.]+", command.api).group()
         source = (SAMPLE_ROOT / command.source).read_text(encoding="utf-8")
         assert call in source, f"{command.key}: `{call}` is missing from {command.source}"
+
+
+def test_aion_yaml_advertises_the_registry_examples():
+    """The examples on the agent card are the ones the registry generates, in its order."""
+    config = yaml.safe_load((SAMPLE_ROOT / "aion.yaml").read_text(encoding="utf-8"))
+    (skill,) = config["aion"]["agents"]["showcase"]["skills"]
+    assert skill["examples"] == examples()

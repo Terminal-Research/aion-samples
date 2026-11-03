@@ -40,6 +40,45 @@ async def stream_node(state: AgentState, *, runtime: Runtime[AionRuntimeContext]
     return {"messages": [reply]}
 
 
+FIRST_SECTION = "Let me check that for you. One moment while I look it up with a tool."
+"""What `sections` streams before its step."""
+
+SECOND_SECTION = (
+    "The tool came back. This second section is the answer, streamed after the "
+    "step that came between."
+)
+"""What `sections` streams after its step."""
+
+
+async def sections_node(state: AgentState, *, runtime: Runtime[AionRuntimeContext]) -> dict:
+    """Stream two sections in one turn, with a step between them.
+
+    A model that answers, calls a tool and answers again streams twice. Each
+    ``thread.reply()`` with an async iterator is one section of the task's
+    ``aion:stream-delta`` artifact, and a new section starts that artifact
+    over: the client sees both sections on the stream, and the task keeps only
+    the last. Text that has to outlive the next section goes out as a message
+    or an artifact of its own. Both streamed sections are kept in state, as
+    `stream` keeps its answer; the explanation after them is a message.
+    """
+    thread = Thread.from_context(runtime.context)
+
+    first = await thread.reply(stream_text(FIRST_SECTION, delay=TYPEWRITER_DELAY_SECONDS))
+    await thread.thinking("Calling a tool…")
+    second = await thread.reply(stream_text(SECOND_SECTION, delay=TYPEWRITER_DELAY_SECONDS))
+
+    reply = await thread.reply(
+        with_footer(
+            "sections",
+            "Two sections were streamed in this turn, with a thought between them. "
+            "The stream showed you both; the task keeps only the second, because a "
+            "new section starts the `aion:stream-delta` artifact over. Fetch the task "
+            "again and the first section is gone.",
+        )
+    )
+    return {"messages": [first, second, reply]}
+
+
 async def thinking_node(state: AgentState, *, runtime: Runtime[AionRuntimeContext]) -> dict:
     """Share two thoughts, then answer.
 
@@ -100,6 +139,52 @@ async def react_node(state: AgentState, *, runtime: Runtime[AionRuntimeContext])
         )
     )
     return {}
+
+
+POSTED = "This message was sent with `thread.post()` and carries no route."
+"""The message `post` posts."""
+
+
+async def post_node(state: AgentState, *, runtime: Runtime[AionRuntimeContext]) -> dict:
+    """Post a message without a route, then explain it in a reply that has one.
+
+    ``thread.reply()`` adds the route of the inbound event to whatever it
+    sends, and the control plane delivers it back to where the question came
+    from. ``thread.post()`` adds none of its own: without a ``target`` its
+    message carries no route, and the control plane delivers it by the
+    distribution's Reply Mode; ``target=MessageActionPayload(...)`` sends it
+    somewhere specific. Over a direct A2A call there is no channel, so
+    neither message carries a route. Both texts are messages.
+    """
+    thread = Thread.from_context(runtime.context)
+
+    posted = await thread.post(POSTED)
+
+    if runtime.context.event is None:
+        situation = (
+            "This turn came over a direct A2A call, so neither message carries a "
+            "route: there is no channel to route to. Send `post` from a connected "
+            "channel to see the difference."
+        )
+    else:
+        situation = (
+            "This reply carries the route of your message, so it goes back to where "
+            "you asked; the message above goes by the distribution's Reply Mode."
+        )
+
+    reply = await thread.reply(
+        with_footer(
+            "post",
+            "`thread.reply()` adds the route of the inbound event — where the "
+            "question came from — to everything it sends. `thread.post()` adds none "
+            "of its own: without a `target` the control plane delivers its message "
+            "by the distribution's Reply Mode, and `target=MessageActionPayload(...)` "
+            "sends it somewhere specific.",
+            "",
+            situation,
+        )
+    )
+    return {"messages": [posted, reply]}
 
 
 async def metadata_node(state: AgentState, *, runtime: Runtime[AionRuntimeContext]) -> dict:

@@ -55,6 +55,12 @@ COMMANDS: tuple[Command, ...] = (
         source="src/nodes/messaging.py",
     ),
     Command(
+        key="sections",
+        summary="Two streamed sections in one turn; the task keeps the last",
+        api="thread.reply(async iterator), twice",
+        source="src/nodes/messaging.py",
+    ),
+    Command(
         key="llm",
         summary="A model answers your prompt through the platform's model service",
         api="aion_chat_openai(model).astream()",
@@ -110,6 +116,12 @@ COMMANDS: tuple[Command, ...] = (
         source="src/nodes/messaging.py",
     ),
     Command(
+        key="post",
+        summary="A message posted without a route, beside a reply that carries one",
+        api="thread.post() / thread.reply()",
+        source="src/nodes/messaging.py",
+    ),
+    Command(
         key="metadata",
         summary="Custom metadata attached to a message and to an artifact",
         api="thread.reply(metadata=...)",
@@ -135,14 +147,20 @@ COMMANDS: tuple[Command, ...] = (
     ),
     Command(
         key="fail",
-        summary="Task finished in the failed state",
-        api="TaskState.TASK_STATE_FAILED",
+        summary="Task failed on purpose, with a reason the caller reads",
+        api="TaskFailedError(reason)",
         source="src/nodes/tasks.py",
     ),
     Command(
         key="context",
         summary="What the agent knows about this conversation and caller",
-        api="Thread.from_context() / context.inbox",
+        api="Thread.from_context() / context.event",
+        source="src/nodes/context.py",
+    ),
+    Command(
+        key="attachment",
+        summary="The files you attach, as the agent receives them",
+        api="context.inbox.message",
         source="src/nodes/context.py",
     ),
     Command(

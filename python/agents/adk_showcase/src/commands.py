@@ -56,6 +56,12 @@ COMMANDS: tuple[Command, ...] = (
         source="src/handlers/messaging.py",
     ),
     Command(
+        key="sections",
+        summary="Two streamed sections in one turn; the task keeps the last",
+        api="thread.reply(async iterator), twice",
+        source="src/handlers/messaging.py",
+    ),
+    Command(
         key="llm",
         summary="A model answers your prompt through the platform's model service",
         api="LlmAgent(model=aion_lite_llm(model))",
@@ -77,7 +83,7 @@ COMMANDS: tuple[Command, ...] = (
     Command(
         key="artifact",
         summary="An artifact built by hand: its own id, name, text and metadata",
-        api="thread.reply(Artifact(...), metadata=...)",
+        api="thread.reply(Artifact(...))",
         source="src/handlers/artifacts.py",
     ),
     Command(
@@ -94,20 +100,26 @@ COMMANDS: tuple[Command, ...] = (
     ),
     Command(
         key="composite",
-        summary="One artifact saved twice, so the store keeps both versions",
-        api="file_artifact(name=...) twice",
+        summary="One artifact streamed in several appended chunks",
+        api="emit_artifact(append=, is_last_chunk=)",
         source="src/handlers/artifacts.py",
     ),
     Command(
         key="ask",
-        summary="Agent asks for missing input and picks it up on the next turn",
-        api="EventActions(state_delta=...)",
+        summary="Agent asks for missing input, then resumes where it stopped",
+        api="Event(long_running_tool_ids=...)",
         source="src/handlers/hitl.py",
     ),
     Command(
         key="react",
         summary="Reaction added to, then removed from, your message",
         api="message.react()",
+        source="src/handlers/messaging.py",
+    ),
+    Command(
+        key="post",
+        summary="A message posted without a route, beside a reply that carries one",
+        api="thread.post() / thread.reply()",
         source="src/handlers/messaging.py",
     ),
     Command(
@@ -136,14 +148,20 @@ COMMANDS: tuple[Command, ...] = (
     ),
     Command(
         key="fail",
-        summary="Task finished in the failed state",
-        api="TaskState.TASK_STATE_FAILED",
+        summary="Task failed on purpose, with a reason the caller reads",
+        api="TaskFailedError(reason)",
         source="src/handlers/tasks.py",
     ),
     Command(
         key="context",
         summary="What the agent knows about this conversation and caller",
-        api="Thread.from_context() / context.inbox",
+        api="Thread.from_context() / context.event",
+        source="src/handlers/context.py",
+    ),
+    Command(
+        key="attachment",
+        summary="The files you attach, as the agent receives them",
+        api="aion_runtime_context.inbox.message",
         source="src/handlers/context.py",
     ),
     Command(

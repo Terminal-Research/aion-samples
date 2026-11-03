@@ -47,8 +47,13 @@ tests/          the graph invoked directly, no server needed
   content as content blocks — the graph reads them the same way it would read a string.
 - **Memory.** The conversation's context id is the graph's thread id, so `messages`
   accumulates across turns without a checkpointer in the code.
-- **Output.** The `AIMessage` the node returned became the reply; had the node called a
-  model with `astream()`, the tokens would have streamed to the client as they arrived.
+- **Output.** The `AIMessage` the node returned became the reply: a message in the
+  task's history and in its status. The task has no artifact of its own, so when it
+  completes the server copies that message into an `aion:assistant-answer` artifact,
+  marked with `aion:sourceMessageId`: a client that reads a task's result from its
+  artifacts finds the answer there, and the graph never built an artifact. Had the node
+  called a model with `astream()`, the tokens would have streamed to the client as they
+  arrived, as the task's `aion:stream-delta` artifact.
 - **Everything else.** Cards, artifacts, thoughts, human-in-the-loop, reactions,
   configuration and custom HTTP routes are one import away — the
   [LangGraph showcase](../langgraph_showcase/README.md) demonstrates each of them.
