@@ -45,11 +45,11 @@ SENT = {
     "task": ["message"],
     "message": ["message"],
     "card": ["message", "card", "card"],
-    # A direct local turn: nothing to do, so a message says why.
-    "llm": ["message"],
-    "config": ["message"],
-    "react": ["message"],
-    "attachment": ["message"],
+    # A direct local turn: nothing to do, so the answer says why.
+    "llm": ["text"],
+    "config": ["text"],
+    "react": ["text"],
+    "attachment": ["text"],
     # Messages by nature: what `ask` says before it waits, the explanation of a
     # failure, and the posted message beside its explanation.
     "ask": ["message"],

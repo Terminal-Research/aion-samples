@@ -12,6 +12,7 @@ from collections.abc import AsyncGenerator
 from aion.adk.authoring.invocation import AionInvocationContext, Thread
 from aion.adk.authoring.models import aion_lite_llm
 from aion.api.exceptions import AionAuthenticationError
+from aion.core.a2a import text_artifact
 from aion.core.exceptions import TaskFailedError
 from google.adk.agents import LlmAgent
 from google.adk.events import Event
@@ -48,13 +49,13 @@ async def with_sdk(ctx: AionInvocationContext, prompt: str) -> AsyncGenerator[Ev
     thread = Thread.from_context(ctx.aion_runtime_context)
 
     if not prompt.strip():
-        await thread.reply(USAGE + COMMAND.footer)
+        await thread.reply(text_artifact(USAGE + COMMAND.footer))
         return
 
     environment = ctx.aion_runtime_context.get_environment()
     model = environment.get_configuration_variable("model") if environment else None
     if not model:
-        await thread.reply("\n".join(_no_model(environment is not None)) + COMMAND.footer)
+        await thread.reply(text_artifact("\n".join(_no_model(environment is not None)) + COMMAND.footer))
         return
     agent = LlmAgent(name="llm", model=aion_lite_llm(model), instruction=INSTRUCTION)
 

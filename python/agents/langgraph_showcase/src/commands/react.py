@@ -25,11 +25,13 @@ async def with_sdk(state: TourState, *, runtime: Runtime[AionRuntimeContext]) ->
     """React with ``thread.message.react()``, or say why there is nothing to react to."""
     thread = Thread.from_context(runtime.context)
     if thread.message is None or runtime.context.event is None:
-        reply = await thread.reply(
-            "A direct A2A call has no provider message to react to. Send `react` from a connected channel."
-            + COMMAND.footer
+        await thread.reply(
+            text_artifact(
+                "A direct A2A call has no provider message to react to. Send `react` from a connected channel."
+                + COMMAND.footer
+            )
         )
-        return {"messages": [reply]}
+        return {}
 
     await thread.message.react("thumbsup", display_value=":thumbsup:")
     await thread.message.react("thumbsup", operation="remove")

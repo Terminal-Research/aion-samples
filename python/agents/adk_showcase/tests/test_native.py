@@ -164,7 +164,9 @@ def test_not_native_says_why_and_names_the_sdk_call(module, monkeypatch):
     command = module.COMMAND
     asyncio.run(not_native(_ctx(), command.key))
 
-    (text,) = sent
+    (artifact,) = sent
+    text = artifact.parts[0].text
+    assert artifact.name == "text"
     assert command.no_native in text
     assert command.api in text
     assert text.endswith(command.footer.strip())

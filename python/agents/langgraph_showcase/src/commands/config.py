@@ -27,11 +27,13 @@ async def with_sdk(state: TourState, *, runtime: Runtime[AionRuntimeContext]) ->
     thread = Thread.from_context(runtime.context)
     environment = runtime.context.get_environment()
     if environment is None:
-        reply = await thread.reply(
-            "A direct local call carries no environment. Deploy the agent and set `greeting` "
-            "on its environment to see the values here." + COMMAND.footer
+        await thread.reply(
+            text_artifact(
+                "A direct local call carries no environment. Deploy the agent and set `greeting` "
+                "on its environment to see the values here." + COMMAND.footer
+            )
         )
-        return {"messages": [reply]}
+        return {}
 
     values = environment.configuration_variables or {}
     lines = [f"Environment `{environment.name}`:"] + (

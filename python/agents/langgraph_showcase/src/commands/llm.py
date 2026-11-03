@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 
 from aion.api.exceptions import AionAuthenticationError
+from aion.core.a2a import text_artifact
 from aion.core.exceptions import TaskFailedError
 from aion.core.runtime import AionRuntimeContext
 from aion.langgraph.authoring.invocation import Thread
@@ -49,14 +50,14 @@ async def with_sdk(state: TourState, *, runtime: Runtime[AionRuntimeContext]) ->
 
     prompt = (state.get("argument") or "").strip()
     if not prompt:
-        reply = await thread.reply(USAGE + COMMAND.footer)
-        return {"messages": [reply]}
+        await thread.reply(text_artifact(USAGE + COMMAND.footer))
+        return {}
 
     environment = runtime.context.get_environment()
     model = environment.get_configuration_variable("model") if environment else None
     if not model:
-        reply = await thread.reply("\n".join(_no_model(environment is not None)) + COMMAND.footer)
-        return {"messages": [reply]}
+        await thread.reply(text_artifact("\n".join(_no_model(environment is not None)) + COMMAND.footer))
+        return {}
     chat = aion_chat_openai(model)
 
     try:

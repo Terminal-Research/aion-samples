@@ -28,15 +28,19 @@ Text that is not the result is a message:
   `composite` and `metadata`, after the explicit Task of `task`, after the streamed
   answers of `sections` and `llm`, before the explicit Message of `message`, which is
   that task's answer, and before the cards of `card`, which close the turn;
-- a turn that does nothing but say why: `config` without an environment, `react`
-  without a distribution, `llm` without a prompt or a model, `attachment` without a
-  file;
 - what `ask` says before the task waits in the input-required state — the question
   itself is the message of that status;
 - the explanation `fail` sends before the task fails;
 - the messages that are themselves the demonstration — the message `metadata` attaches
   metadata to, the message `post` posts, and the explicit A2A Message and Task that
   `message` and `task` place in the outbox.
+
+A turn with nothing to do answers with a text artifact that says why: `config` without
+an environment, `react` without a distribution, `llm` without a prompt or a model,
+`attachment` without a file, and `… native` for what LangGraph cannot do alone. Its
+answer is that artifact, so the server builds no `aion:assistant-answer` for it. A
+`native` version answers the way LangGraph alone does, with an `AIMessage`; the server
+copies that message into `aion:assistant-answer`, as it does for any LangGraph agent.
 
 A task that fails says why in the message of its FAILED status. `fail` does it on
 purpose and a refused or failed model call does it in `llm`: the node raises
@@ -196,8 +200,8 @@ routing, with `native` or without, lands on a node it has;
 alone, that the native nodes call nothing from the SDK, what each of them returns,
 and that `… native` for the rest names the SDK call to use;
 `tests/test_answers.py` runs the nodes with the thread captured and checks what each
-command sends: a text artifact when the answer is text, and a message kept in state for
-an explanation beside a result, a turn that does nothing and the demonstrated messages;
+command sends: a text artifact when the answer is text or a turn has nothing to do, and
+a message kept in state for an explanation beside a result and the demonstrated messages;
 the thoughts of `thinking` and `sections`, the chunk flags of `composite`, the question
 `ask` waits on, the reason `fail` raises, the outbox of `task` and `message`, the
 missing route of `post`, the files `attachment` describes, and that a card button lands

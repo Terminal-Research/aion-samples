@@ -18,7 +18,7 @@ from langchain_core.messages import AIMessageChunk
 from src.commands import llm as llm_module
 from src.commands.llm import USAGE
 from src.commands.llm import with_sdk as llm_node
-from tests.support import message_text
+from tests.support import answer_text, message_text
 
 ANSWER_CHUNKS = ("Hello", ", ", "world")
 STREAM_ID = "lc_run--stream"
@@ -89,14 +89,13 @@ def test_model_comes_from_the_environment(model_calls):
 
 
 def test_no_model_means_no_call(model_calls, replies):
-    """There is no default model: without one a message says how to set it."""
+    """There is no default model: without one a text artifact says how to set it."""
     first = asyncio.run(llm_node(_state("hi"), runtime=_runtime(None)))
     second = asyncio.run(llm_node(_state("hi"), runtime=_runtime({"greeting": "Hi"})))
     assert model_calls == []
-    assert "no environment" in message_text(replies[0])
-    assert "Set the `model` field" in message_text(replies[1])
-    assert [message.content for message in first["messages"]] == [replies[0].content]
-    assert [message.content for message in second["messages"]] == [replies[1].content]
+    assert "no environment" in answer_text(replies[0])
+    assert "Set the `model` field" in answer_text(replies[1])
+    assert first == second == {}
 
 
 def test_model_answer_is_followed_by_a_footer_message(model_calls, replies):
@@ -113,11 +112,11 @@ def test_model_answer_is_followed_by_a_footer_message(model_calls, replies):
 
 
 def test_missing_prompt_asks_for_one(model_calls, replies):
-    """A bare `llm` explains the usage in a message and calls no model."""
+    """A bare `llm` explains the usage in a text artifact and calls no model."""
     update = asyncio.run(llm_node(_state(""), runtime=_runtime(None)))
     assert model_calls == []
-    assert USAGE in message_text(replies[0])
-    assert [message.content for message in update["messages"]] == [replies[0].content]
+    assert USAGE in answer_text(replies[0])
+    assert update == {}
 
 
 def test_sdk_refusal_fails_the_task_in_the_sdk_words(monkeypatch, replies):

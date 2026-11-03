@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from aion.core.a2a import text_artifact
 from aion.core.runtime import AionRuntimeContext
 from aion.langgraph.authoring.invocation import Thread
 from langgraph.runtime import Runtime
@@ -85,11 +86,13 @@ async def not_native(state: TourState, *, runtime: Runtime[AionRuntimeContext]) 
     """Say that LangGraph alone cannot do what the command shows, and which SDK call does it."""
     command = commands.BY_KEY[state["command"]].COMMAND
     thread = Thread.from_context(runtime.context)
-    reply = await thread.reply(
-        f"LangGraph alone cannot do this: {command.no_native}. Use `{command.api}`, as `{command.key}` shows."
-        + command.footer
+    await thread.reply(
+        text_artifact(
+            f"LangGraph alone cannot do this: {command.no_native}. Use `{command.api}`, as `{command.key}` shows."
+            + command.footer
+        )
     )
-    return {"messages": [reply]}
+    return {}
 
 
 def _normalize(word: str) -> str:

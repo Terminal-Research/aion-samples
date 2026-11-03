@@ -31,7 +31,7 @@ async def with_sdk(ctx: AionInvocationContext, argument: str) -> None:
     message = ctx.aion_runtime_context.inbox.message if inbox is not None else None
     files = [part for part in (message.parts if message else []) if part.WhichOneof("content") in ("raw", "url")]
     if not files:
-        await thread.reply("Attach a file to `attachment` and I will describe it." + COMMAND.footer)
+        await thread.reply(text_artifact("Attach a file to `attachment` and I will describe it." + COMMAND.footer))
         return
 
     lines = [f"Your message carried {len(files)} file(s):"] + [_describe(part) for part in files]

@@ -18,12 +18,15 @@ behaviour rather than model output. What a command produces is the task's result
 result is an artifact: files, data, a hand-built artifact, or — when the answer is text —
 `thread.reply(text_artifact(text))`. The task holds it among its artifacts, and the
 server copies no `aion:assistant-answer` from a message for it. Text that is not the
-result is a message: the explanation beside a result, a turn that does nothing but say
-why (`config` without an environment, `react` without a distribution, `llm` without a
-prompt or a model, `attachment` without a file), what `ask` says before the task waits —
+result is a message: the explanation beside a result, what `ask` says before the task waits —
 the question itself is the message of the input-required status — the messages
 `metadata` and `post` demonstrate, and the explanation `fail` sends before the task
 fails: a failed task has no result, and its reason is the message of the FAILED status.
+A turn with nothing to do answers with a text artifact that says why: `config` without an
+environment, `react` without a distribution, `llm` without a prompt or a model,
+`attachment` without a file, and `… native` for what ADK cannot do alone; the server
+builds no `aion:assistant-answer` for it. A `native` version that answers with a text
+event gets that message copied into `aion:assistant-answer`, as any ADK agent does.
 Three commands stream: `stream` and `sections`, which pace their own chunks because that
 is what they demonstrate, and `llm`, where a model from the platform's catalog answers
 and its tokens are the chunks; all three answer in the task's `aion:stream-delta`
@@ -207,7 +210,7 @@ and that the examples in `aion.yaml` are the commands';
 `tests/test_agent.py` asserts every command has a handler with the one dispatch
 signature, that dispatch resolves, and runs every handler to check what it sends, in
 order: a text artifact when the answer is text, the result and a message explaining it
-otherwise, a message for a turn that does nothing, and no text event beside them. It
+otherwise, a text artifact for a turn that does nothing, and no text event beside them. It
 also checks the call `ask` pauses on and the turn that resumes it, the reason `fail`
 raises, the thoughts of `thinking` and `sections`, the chunks of `composite`, the
 missing route of `post`, the files `attachment` describes, and that a card button lands

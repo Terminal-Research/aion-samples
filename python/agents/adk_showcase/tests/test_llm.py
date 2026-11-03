@@ -93,18 +93,19 @@ def model_calls(monkeypatch):
 
 @pytest.fixture
 def replies(monkeypatch):
-    """Capture the text of every message the handler sends instead of sending it.
+    """Capture the text of what the handler sends instead of sending it.
 
-    The handler calls ``thread.reply()`` itself, so the fake stands in for the
-    SDK call rather than for a helper around it. Everything this handler sends
-    through ``Thread`` is a message — a hint or the footer beside the streamed
-    answer — and the fake checks that too.
+    A hint (no prompt, no model) is the turn's answer, a text artifact; the
+    footer beside a model's answer is a message. Each is captured as
+    ``(kind, text)``.
     """
-    captured: list[str] = []
+    captured: list[tuple[str, str]] = []
 
     async def fake_reply(self, content, **kwargs):
-        assert isinstance(content, str), f"a {type(content).__name__} was sent, not a message"
-        captured.append(content)
+        if isinstance(content, str):
+            captured.append(("message", content))
+        else:
+            captured.append(("artifact", content.parts[0].text))
 
     monkeypatch.setattr(Thread, "reply", fake_reply)
     return captured
@@ -117,27 +118,28 @@ def test_model_comes_from_the_environment(model_calls):
 
 
 def test_no_model_means_no_call(model_calls, replies):
-    """There is no default model: without one a message says how to set it."""
+    """There is no default model: without one a text artifact says how to set it."""
     asyncio.run(_collect(_ctx(None), "hi"))
     asyncio.run(_collect(_ctx({"greeting": "Hi"}), "hi"))
     assert model_calls == []
-    assert "no environment" in replies[0]
-    assert "Set the `model` field" in replies[1]
+    assert replies[0][0] == replies[1][0] == "artifact"
+    assert "no environment" in replies[0][1]
+    assert "Set the `model` field" in replies[1][1]
 
 
 def test_agent_events_are_passed_through(model_calls, replies):
     """The LlmAgent's events reach the caller untouched; the footer follows as a message."""
     events = asyncio.run(_collect(_ctx({"model": "some-model"}), "hi"))
     assert [event.content.parts[0].text for event in events] == [ANSWER]
-    assert len(replies) == 1 and "Answered by `some-model`" in replies[0]
+    assert len(replies) == 1 and replies[0][0] == "message" and "Answered by `some-model`" in replies[0][1]
 
 
 def test_missing_prompt_asks_for_one(model_calls, replies):
-    """A bare `llm` explains the usage in a message and builds no agent."""
+    """A bare `llm` explains the usage in a text artifact and builds no agent."""
     events = asyncio.run(_collect(_ctx(None), "   "))
     assert events == []
     assert model_calls == []
-    assert USAGE in replies[0]
+    assert replies[0][0] == "artifact" and USAGE in replies[0][1]
 
 
 def test_sdk_refusal_fails_the_task_in_the_sdk_words(model_calls, replies):

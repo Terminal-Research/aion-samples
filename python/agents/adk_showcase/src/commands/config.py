@@ -26,8 +26,10 @@ async def with_sdk(ctx: AionInvocationContext, argument: str) -> None:
     environment = ctx.aion_runtime_context.get_environment()
     if environment is None:
         await thread.reply(
-            "A direct local call carries no environment. Deploy the agent and set `greeting` "
-            "on its environment to see the values here." + COMMAND.footer
+            text_artifact(
+                "A direct local call carries no environment. Deploy the agent and set `greeting` "
+                "on its environment to see the values here." + COMMAND.footer
+            )
         )
         return
 

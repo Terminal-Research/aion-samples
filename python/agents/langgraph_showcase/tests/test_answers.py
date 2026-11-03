@@ -2,12 +2,12 @@
 
 The nodes run with ``thread.reply()`` captured. A command whose answer is text
 sends it as a text artifact and returns no message, because a returned
-``AIMessage`` would reach the client as a message as well. A command whose
-result is something else — files, data, a hand-built artifact, an explicit
-Task, cards — sends its explanation as a message and keeps it in state. So
-do the turns that do nothing but say why, and the texts that are messages by
-nature: what `ask` says before it waits, the explanation of `fail`, the
-messages `metadata` and `post` demonstrate.
+``AIMessage`` would reach the client as a message as well; so does a turn with
+nothing to do, whose answer says why. A command whose result is something
+else — files, data, a hand-built artifact, an explicit Task, cards — sends its
+explanation as a message and keeps it in state. So do the texts that are
+messages by nature: what `ask` says before it waits, the explanation of
+`fail`, the messages `metadata` and `post` demonstrate.
 """
 
 import asyncio
@@ -81,6 +81,10 @@ def no_waiting(monkeypatch):
         ("http", http.with_sdk),
         ("thinking", thinking.with_sdk),
         ("progress", progress.with_sdk),
+        # A turn with nothing to do: its answer says why.
+        ("config", config.with_sdk),
+        ("react", react.with_sdk),
+        ("attachment", attachment.with_sdk),
     ],
 )
 def test_text_answer_is_one_text_artifact_and_no_message(command, node, replies):
@@ -99,23 +103,6 @@ def test_every_text_artifact_is_a_new_artifact(replies):
     _run(help.with_sdk, "help")
 
     assert replies[0].content.artifact_id != replies[1].content.artifact_id
-
-
-@pytest.mark.parametrize(
-    ("command", "node"),
-    [
-        ("config", config.with_sdk),
-        ("react", react.with_sdk),
-        ("attachment", attachment.with_sdk),
-    ],
-)
-def test_a_turn_that_does_nothing_says_why_in_a_message(command, node, replies):
-    """No environment, no distribution, no file: nothing is produced, so no artifact."""
-    update = _run(node, command)
-
-    assert len(replies) == 1
-    assert message_text(replies[0]).endswith(_footer(command))
-    assert _kept(update) == [replies[0].content]
 
 
 def test_hand_built_artifact_keeps_every_field_and_is_explained_in_a_message(replies):

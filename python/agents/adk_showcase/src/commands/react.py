@@ -24,8 +24,10 @@ async def with_sdk(ctx: AionInvocationContext, argument: str) -> None:
     thread = Thread.from_context(ctx.aion_runtime_context)
     if thread.message is None or ctx.aion_runtime_context.event is None:
         await thread.reply(
-            "A direct A2A call has no provider message to react to. Send `react` from a connected channel."
-            + COMMAND.footer
+            text_artifact(
+                "A direct A2A call has no provider message to react to. Send `react` from a connected channel."
+                + COMMAND.footer
+            )
         )
         return
 

@@ -11,7 +11,7 @@ from langchain_core.messages import AIMessage, HumanMessage
 
 from src.commands import COMMANDS, attachment, context, fail, file, message, sections, stream
 from src.tour.routing import not_native, parse_input
-from tests.support import message_text
+from tests.support import answer_text
 
 NATIVE = [module for module in COMMANDS if hasattr(module, "with_langgraph")]
 
@@ -110,8 +110,8 @@ def test_not_native_says_why_and_names_the_sdk_call(module, replies):
     state = {"messages": [], "command": command.key, "native": True}
     update = asyncio.run(not_native(state, runtime=SimpleNamespace(context=AionRuntimeContext())))
 
-    text = message_text(replies[0])
+    text = answer_text(replies[0])
     assert command.no_native in text
     assert command.api in text
     assert text.endswith(command.footer.strip())
-    assert [kept.content for kept in update["messages"]] == [replies[0].content]
+    assert update == {}

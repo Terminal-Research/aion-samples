@@ -6,6 +6,7 @@ import re
 from dataclasses import dataclass
 
 from aion.adk.authoring.invocation import AionInvocationContext, Thread
+from aion.core.a2a import text_artifact
 
 from src import commands
 
@@ -67,8 +68,10 @@ async def not_native(ctx: AionInvocationContext, key: str) -> None:
     command = commands.BY_KEY[key].COMMAND
     thread = Thread.from_context(ctx.aion_runtime_context)
     await thread.reply(
-        f"ADK alone cannot do this: {command.no_native}. Use `{command.api}`, as `{command.key}` shows."
-        + command.footer
+        text_artifact(
+            f"ADK alone cannot do this: {command.no_native}. Use `{command.api}`, as `{command.key}` shows."
+            + command.footer
+        )
     )
 
 
