@@ -21,7 +21,8 @@ aion:
           name: "Feature Showcase"
           description: >-
             Each keyword runs one demonstration and names the SDK call that
-            produced it. Send "help" for the menu.
+            produced it; add "native" after it to see the same done with ADK
+            alone. Send "help" for the menu.
           tags: [ "showcase", "streaming", "artifacts", "cards", "a2a", "adk" ]
           examples:
             - "help"
@@ -46,6 +47,17 @@ aion:
             - "attachment"
             - "config"
             - "http"
+            - "stream native"
+            - "sections native"
+            - "llm native What is the A2A protocol?"
+            - "artifact native"
+            - "file native"
+            - "ask native"
+            - "metadata native"
+            - "message native"
+            - "fail native"
+            - "context native"
+            - "attachment native"
 
       # Filled in per environment by an administrator and delivered with the
       # invocation. The `config` command reads these back.

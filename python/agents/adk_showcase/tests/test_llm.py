@@ -17,8 +17,9 @@ from aion.core.runtime import AionRuntimeContext
 from google.adk.events import Event
 from google.genai import types
 
-from src.handlers import llm as llm_module
-from src.handlers.llm import USAGE, llm_handler
+from src.commands import llm as llm_module
+from src.commands.llm import USAGE
+from src.commands.llm import with_sdk as llm_handler
 
 ANSWER = "Hello, world"
 

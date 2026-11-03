@@ -1,4 +1,4 @@
-"""Registry and parsing tests — no SDK or server required."""
+"""The commands, as the tour lists and reads them."""
 
 import re
 from pathlib import Path
@@ -6,14 +6,22 @@ from pathlib import Path
 import pytest
 import yaml
 
-from src.commands import COMMANDS, examples, menu_lines, parse_command, parse_input
+from src.commands import COMMANDS
+from src.tour.menu import examples, menu_lines
+from src.tour.routing import parse_input
 
 SAMPLE_ROOT = Path(__file__).resolve().parents[1]
+LISTED = [module.COMMAND for module in COMMANDS]
+
+
+def test_every_command_lives_in_the_file_named_after_its_key():
+    for module in COMMANDS:
+        assert module.__name__ == f"src.commands.{module.COMMAND.key}"
+        assert (SAMPLE_ROOT / module.COMMAND.source).is_file()
 
 
 def test_keys_are_unique():
-    """Each command has exactly one keyword, and no two share it."""
-    keys = [command.key for command in COMMANDS]
+    keys = [command.key for command in LISTED]
     assert len(keys) == len(set(keys))
 
 
@@ -31,15 +39,13 @@ def test_keys_are_unique():
 )
 def test_input_resolves_to_command(text, expected):
     """Input is matched case-insensitively, past punctuation and filler words."""
-    command = parse_command(text)
-    assert command is not None
-    assert command.key == expected
+    assert parse_input(text).key == expected
 
 
 @pytest.mark.parametrize("text", ["", None, "   ", "tell me a joke", "show me"])
-def test_unmatched_input_returns_none(text):
+def test_unmatched_input_resolves_to_no_command(text):
     """Anything that is not a command falls through to the menu."""
-    assert parse_command(text) is None
+    assert parse_input(text).key is None
 
 
 @pytest.mark.parametrize(
@@ -59,54 +65,39 @@ def test_argument_is_taken_verbatim(text, expected):
 
 
 def test_llm_is_the_command_that_takes_a_prompt():
-    """`llm` is the one command with an argument, and the menu shows it."""
-    llm = next(command for command in COMMANDS if command.key == "llm")
-    assert llm.argument_hint == "prompt"
-    assert llm.usage == "llm {prompt}"
-    assert [command.key for command in COMMANDS if command.argument_hint] == ["llm"]
+    assert [command.key for command in LISTED if command.argument_hint] == ["llm"]
+    assert next(command for command in LISTED if command.key == "llm").usage == "llm {prompt}"
 
 
-def test_menu_spells_out_declared_arguments():
-    """The menu spells out an argument exactly where one is accepted."""
+def test_menu_lists_every_command_with_its_usage():
     rendered = "\n".join(menu_lines())
-    for command in COMMANDS:
+    for command in LISTED:
         assert f"  {command.usage} " in rendered
 
 
-def test_every_command_appears_in_menu_and_examples():
-    """The menu and the agent card examples are generated from the registry."""
-    rendered = "\n".join(menu_lines())
-    for command in COMMANDS:
-        assert command.key in rendered
-    assert len(examples()) == len(COMMANDS)
-    for command, example in zip(COMMANDS, examples()):
+def test_examples_are_every_command_then_every_native_version():
+    natives = [command for command in LISTED if command.native]
+    assert len(examples()) == len(LISTED) + len(natives)
+    for command, example in zip(LISTED, examples()):
         assert example.startswith(command.key)
+    for command, example in zip(natives, examples()[len(LISTED):]):
+        assert example.startswith(f"{command.key} native")
 
 
-def test_footer_points_at_api_and_source():
-    """Every command names the SDK call and the file that implements it."""
-    for command in COMMANDS:
-        footer = command.footer()
-        assert command.api in footer
-        assert command.source in footer
-        assert command.source.startswith("src/")
+def test_the_footer_names_the_call_and_the_file():
+    for command in LISTED:
+        assert command.footer == f"\n\n↳ {command.api} · {command.source}"
 
 
-def test_the_call_in_the_footer_is_written_in_the_source_file():
-    """The SDK call a footer names is visible in the file the footer points at.
-
-    That is the promise the footer makes, and it is the reason handlers call the
-    SDK themselves instead of going through a reply helper. Checking it here
-    keeps a future helper from quietly hiding the call again.
-    """
-    for command in COMMANDS:
+def test_the_call_in_the_footer_is_written_in_the_command_file():
+    """The SDK call a footer names is visible in the file the footer points at."""
+    for command in LISTED:
         call = re.match(r"[\w.]+", command.api).group()
         source = (SAMPLE_ROOT / command.source).read_text(encoding="utf-8")
         assert call in source, f"{command.key}: `{call}` is missing from {command.source}"
 
 
-def test_aion_yaml_advertises_the_registry_examples():
-    """The examples on the agent card are the ones the registry generates, in its order."""
+def test_aion_yaml_advertises_the_examples_in_order():
     config = yaml.safe_load((SAMPLE_ROOT / "aion.yaml").read_text(encoding="utf-8"))
     (skill,) = config["aion"]["agents"]["showcase"]["skills"]
     assert skill["examples"] == examples()

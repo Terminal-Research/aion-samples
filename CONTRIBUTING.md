@@ -33,7 +33,15 @@ Every sample has:
 
 Where a feature has no equivalent in a given framework, keep the command and have it say
 so explicitly. A visible "not available here, and here is why" is more useful to a reader
-than a silently missing feature.
+than a silently missing feature. The showcases do the same for the framework alone: every
+command's `COMMAND` says whether the framework can do it without the SDK (`native`) or
+why it cannot (`no_native`), and `<command> native` shows that.
+
+A showcase command is one file in `src/commands/`, named after its keyword, so that a
+developer who opens it understands how to use the feature: `COMMAND` first, then
+`with_sdk`, then the framework-only version right below it, short docstrings that say
+what the client gets, and no helper in between. Everything that only runs the tour —
+reading the keyword, routing, the menu — lives in `src/tour/`.
 
 ## Checks
 

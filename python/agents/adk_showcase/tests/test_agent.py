@@ -14,16 +14,17 @@ from aion.core.exceptions import TaskFailedError
 from aion.core.runtime import AionRuntimeContext
 from google.genai import types
 
-from src.agent import HANDLERS, _inbound_text, create_agent
-from src.commands import COMMANDS, COMMANDS_BY_KEY, parse_command
-from src.handlers import answer_handler, answered_question
-from src.handlers import artifacts as artifacts_module
-from src.handlers import messaging as messaging_module
-from src.handlers import tasks as tasks_module
-from src.handlers.artifacts import HAND_BUILT_METADATA, HAND_BUILT_NAME
-from src.handlers.hitl import QUESTION, REQUEST_INPUT
-from src.handlers.messaging import POSTED
-from src.handlers.tasks import FAIL_REASON
+from src.agent import create_agent
+from src.commands import BY_KEY, COMMANDS, ask, composite, progress
+from src.commands.ask import QUESTION, REQUEST_INPUT, answered_question
+from src.commands.fail import REASON as FAIL_REASON
+from src.commands.post import POSTED
+from src.tour import standins
+from src.tour.routing import inbound_text as _inbound_text
+from src.tour.routing import parse_input
+
+HANDLERS = {key: module.with_sdk for key, module in BY_KEY.items()}
+"""The SDK version of every command, by its key."""
 
 SENT = {
     # The answer is text: one text artifact.
@@ -39,6 +40,7 @@ SENT = {
     "artifact": ["artifact", "message"],
     "file": ["artifact", "artifact", "message"],
     "data": ["artifact", "message"],
+    "composite": ["message"],
     "metadata": ["message", "artifact", "message"],
     "task": ["message"],
     "message": ["message"],
@@ -47,7 +49,6 @@ SENT = {
     "llm": ["message"],
     "config": ["message"],
     "react": ["message"],
-    "composite": ["message"],
     "attachment": ["message"],
     # Messages by nature: what `ask` says before it waits, the explanation of a
     # failure, and the posted message beside its explanation.
@@ -59,8 +60,8 @@ SENT = {
 
 
 def test_every_command_has_a_handler():
-    """The registry and the handler table stay in step."""
-    assert set(HANDLERS) == {command.key for command in COMMANDS}
+    """Every command file has an SDK version."""
+    assert set(HANDLERS) == {module.COMMAND.key for module in COMMANDS}
 
 
 def test_every_handler_takes_the_context_and_an_argument():
@@ -82,8 +83,8 @@ def test_agent_is_named_after_its_aion_yaml_entry():
 
 def test_every_keyword_resolves_to_a_handler():
     """Anything the menu advertises can actually be dispatched."""
-    for command in COMMANDS:
-        resolved = parse_command(command.key)
+    for module in COMMANDS:
+        resolved = parse_input(module.COMMAND.key)
         assert resolved is not None
         assert resolved.key in HANDLERS
 
@@ -123,8 +124,10 @@ def sent(monkeypatch):
 
     monkeypatch.setattr(Thread, "reply", fake_reply)
     monkeypatch.setattr(Thread, "post", fake_post)
-    monkeypatch.setattr(tasks_module.asyncio, "sleep", no_sleep)
-    monkeypatch.setattr(messaging_module, "TYPEWRITER_DELAY_SECONDS", 0)
+    monkeypatch.setattr(progress.asyncio, "sleep", no_sleep)
+    monkeypatch.setattr(standins, "TYPEWRITER_DELAY_SECONDS", 0)
+    # `composite` appends its chunks through the emitter of a running invocation.
+    monkeypatch.setattr(composite, "get_adk_emitter", lambda: [].append)
     return captured
 
 
@@ -211,7 +214,7 @@ def test_each_command_sends_its_result_and_explains_it_in_messages(key, sent):
 
 def test_the_answer_to_an_open_question_is_a_text_artifact(sent):
     """The turn that carries the answer to `ask` answers with a text artifact only."""
-    events = _run(answer_handler, "staging")
+    events = _run(ask.answer, "staging")
 
     assert len(sent) == 1
     content, _ = sent[0]
@@ -225,9 +228,9 @@ def test_artifact_sends_a_hand_built_artifact(sent):
     _run(HANDLERS["artifact"])
 
     (built, metadata), (explanation, _) = sent
-    assert isinstance(built, Artifact) and built.name == HAND_BUILT_NAME
+    assert isinstance(built, Artifact) and built.name == "hand-built"
     assert built.artifact_id and len(built.parts) == 1 and built.parts[0].text
-    assert dict(built.metadata) == HAND_BUILT_METADATA
+    assert dict(built.metadata) == {"showcase.kind": "hand-built"}
     assert metadata is None
     assert isinstance(explanation, str)
     assert built.artifact_id in explanation
@@ -279,7 +282,7 @@ def test_fail_explains_then_raises_its_reason(sent):
 
     assert failure.value.reason == FAIL_REASON
     (message, _), = sent
-    assert message.endswith(COMMANDS_BY_KEY["fail"].footer())
+    assert message.endswith(BY_KEY["fail"].COMMAND.footer.strip())
 
 
 def test_thinking_shares_its_thoughts_before_the_answer(sent, thoughts):
@@ -307,7 +310,7 @@ def test_post_carries_no_route_and_the_reply_explains_it(sent):
 
 def test_composite_appends_three_chunks_to_one_artifact(sent, monkeypatch):
     emitted: list = []
-    monkeypatch.setattr(artifacts_module, "get_adk_emitter", lambda: emitted.append)
+    monkeypatch.setattr(composite, "get_adk_emitter", lambda: emitted.append)
 
     _run(HANDLERS["composite"])
 
@@ -350,7 +353,7 @@ def test_a_card_button_lands_on_the_command_it_names(sent):
     ]
     assert ids
     for action_id in ids:
-        assert parse_command(action_id) is not None
+        assert parse_input(action_id).key == action_id
         pressed = SimpleNamespace(
             aion_runtime_context=SimpleNamespace(event=SimpleNamespace(payload=SimpleNamespace(action_id=action_id)))
         )

@@ -1,11 +1,4 @@
-"""Graph assembly for the showcase agent.
-
-Every turn enters through the Aion event router and leaves through the node
-that demonstrates the resolved command. Nodes are named after the command they
-handle, and each one is wired here by hand: adding a demonstration means adding
-a registry entry, a node function, and one ``add_node``/``add_edge`` pair
-below.
-"""
+"""The tour's graph: the event router reads the keyword, then that command's node answers."""
 
 from __future__ import annotations
 
@@ -14,106 +7,34 @@ from aion.langgraph.authoring import create_event_router
 from langgraph.constants import END, START
 from langgraph.graph import StateGraph
 
-import src.api  # registers the /showcase routes with the server
-from src.nodes import (
-    artifact_node,
-    ask_node,
-    ask_wait_node,
-    attachment_node,
-    card_node,
-    composite_node,
-    config_node,
-    context_node,
-    data_node,
-    fail_node,
-    file_node,
-    http_node,
-    llm_node,
-    menu_node,
-    message_node,
-    metadata_node,
-    post_node,
-    progress_node,
-    react_node,
-    sections_node,
-    stream_node,
-    task_node,
-    thinking_node,
-)
-from src.router import handle_card_action, handle_input, route_command
-from src.state import AgentState
+from src.commands import COMMANDS, ask
+from src.tour import TourState
+from src.tour.routing import not_native, read_card_action, read_input, route
 
 
 def create_graph() -> StateGraph:
-    """Build the showcase workflow.
-
-    Returns:
-        The assembled, uncompiled workflow.
-    """
-    workflow = StateGraph(AgentState, context_schema=AionRuntimeContext)
-
+    """Build the graph; the Aion server compiles and serves it."""
+    workflow = StateGraph(TourState, context_schema=AionRuntimeContext)
     workflow.add_node(
         "events",
-        create_event_router(
-            on_message=handle_input,
-            on_invoke=handle_input,
-            on_card_action=handle_card_action,
-        ),
+        create_event_router(on_message=read_input, on_invoke=read_input, on_card_action=read_card_action),
     )
-
-    workflow.add_node("help", menu_node)
-    workflow.add_node("stream", stream_node)
-    workflow.add_node("sections", sections_node)
-    workflow.add_node("llm", llm_node)
-    workflow.add_node("thinking", thinking_node)
-    workflow.add_node("card", card_node)
-    workflow.add_node("artifact", artifact_node)
-    workflow.add_node("file", file_node)
-    workflow.add_node("data", data_node)
-    workflow.add_node("composite", composite_node)
-    workflow.add_node("ask", ask_node)
-    workflow.add_node("ask_wait", ask_wait_node)
-    workflow.add_node("react", react_node)
-    workflow.add_node("post", post_node)
-    workflow.add_node("metadata", metadata_node)
-    workflow.add_node("progress", progress_node)
-    workflow.add_node("task", task_node)
-    workflow.add_node("message", message_node)
-    workflow.add_node("fail", fail_node)
-    workflow.add_node("context", context_node)
-    workflow.add_node("attachment", attachment_node)
-    workflow.add_node("config", config_node)
-    workflow.add_node("http", http_node)
-
     workflow.add_edge(START, "events")
-    workflow.add_conditional_edges("events", route_command)
+    workflow.add_conditional_edges("events", route)
 
-    workflow.add_edge("help", END)
-    workflow.add_edge("stream", END)
-    workflow.add_edge("sections", END)
-    workflow.add_edge("llm", END)
-    workflow.add_edge("thinking", END)
-    workflow.add_edge("card", END)
-    workflow.add_edge("artifact", END)
-    workflow.add_edge("file", END)
-    workflow.add_edge("data", END)
-    workflow.add_edge("composite", END)
-    workflow.add_edge("react", END)
-    workflow.add_edge("post", END)
-    workflow.add_edge("metadata", END)
-    workflow.add_edge("progress", END)
-    workflow.add_edge("task", END)
-    workflow.add_edge("message", END)
-    workflow.add_edge("fail", END)
-    workflow.add_edge("context", END)
-    workflow.add_edge("attachment", END)
-    workflow.add_edge("config", END)
-    workflow.add_edge("http", END)
+    for command in COMMANDS:
+        workflow.add_node(command.COMMAND.key, command.with_sdk)
+        if hasattr(command, "with_langgraph"):
+            workflow.add_node(f"{command.COMMAND.key}_native", command.with_langgraph)
+    workflow.add_node("not_native", not_native)
 
-    # `ask` is the one two-node command. LangGraph replays a node from its
-    # first line when the graph resumes, so the question is asked in one node
-    # and the wait happens in the next: nothing gets sent twice.
+    # `ask` waits in a node of its own: LangGraph replays a node from its first
+    # line when the graph resumes, so the explanation is sent in `ask` and the
+    # wait happens in `ask_wait`.
+    workflow.add_node("ask_wait", ask.wait)
     workflow.add_edge("ask", "ask_wait")
-    workflow.add_edge("ask_wait", END)
 
+    for name in workflow.nodes:
+        if name not in ("events", "ask"):
+            workflow.add_edge(name, END)
     return workflow

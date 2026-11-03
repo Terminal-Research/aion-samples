@@ -22,40 +22,32 @@ from aion.core.exceptions import TaskFailedError
 from aion.core.runtime import AionRuntimeContext
 from langchain_core.messages import HumanMessage
 
-from src.commands import COMMANDS_BY_KEY, parse_command
-from src.nodes import (
-    artifact_node,
-    ask_node,
-    ask_wait_node,
-    attachment_node,
-    card_node,
-    composite_node,
-    config_node,
-    context_node,
-    data_node,
-    fail_node,
-    file_node,
-    http_node,
-    menu_node,
-    message_node,
-    metadata_node,
-    post_node,
-    progress_node,
-    react_node,
-    sections_node,
-    stream_node,
-    task_node,
-    thinking_node,
+from src.commands import (
+    BY_KEY,
+    artifact,
+    ask,
+    attachment,
+    card,
+    composite,
+    config,
+    context,
+    data,
+    fail,
+    file,
+    help,
+    http,
+    message,
+    metadata,
+    post,
+    progress,
+    react,
+    sections,
+    stream,
+    task,
+    thinking,
 )
-from src.nodes import artifacts as artifacts_module
-from src.nodes import hitl as hitl_module
-from src.nodes import messaging as messaging_module
-from src.nodes import tasks as tasks_module
-from src.nodes.cards import card_node as _card_node
-from src.nodes.hitl import QUESTION
-from src.nodes.messaging import POSTED
-from src.nodes.tasks import FAIL_REASON
-from src.router import handle_card_action
+from src.tour import standins
+from src.tour.routing import parse_input, read_card_action
 from tests.support import answer_text, message_text
 
 
@@ -66,7 +58,7 @@ def _run(node, command: str, context: AionRuntimeContext | None = None) -> dict:
 
 
 def _footer(command: str) -> str:
-    return COMMANDS_BY_KEY[command].footer()
+    return BY_KEY[command].COMMAND.footer.strip()
 
 
 def _kept(update: dict) -> list[str]:
@@ -77,18 +69,18 @@ def _kept(update: dict) -> list[str]:
 @pytest.fixture(autouse=True)
 def no_waiting(monkeypatch):
     """Drop the pauses `progress` and `stream` take for show."""
-    monkeypatch.setattr(tasks_module, "STEP_SECONDS", 0)
-    monkeypatch.setattr(messaging_module, "TYPEWRITER_DELAY_SECONDS", 0)
+    monkeypatch.setattr(progress, "STEP_SECONDS", 0)
+    monkeypatch.setattr(standins, "TYPEWRITER_DELAY_SECONDS", 0)
 
 
 @pytest.mark.parametrize(
     ("command", "node"),
     [
-        ("help", menu_node),
-        ("context", context_node),
-        ("http", http_node),
-        ("thinking", thinking_node),
-        ("progress", progress_node),
+        ("help", help.with_sdk),
+        ("context", context.with_sdk),
+        ("http", http.with_sdk),
+        ("thinking", thinking.with_sdk),
+        ("progress", progress.with_sdk),
     ],
 )
 def test_text_answer_is_one_text_artifact_and_no_message(command, node, replies):
@@ -103,8 +95,8 @@ def test_text_answer_is_one_text_artifact_and_no_message(command, node, replies)
 
 def test_every_text_artifact_is_a_new_artifact(replies):
     """Two answers are two artifacts, not one artifact sent twice."""
-    _run(menu_node, "help")
-    _run(menu_node, "help")
+    _run(help.with_sdk, "help")
+    _run(help.with_sdk, "help")
 
     assert replies[0].content.artifact_id != replies[1].content.artifact_id
 
@@ -112,16 +104,13 @@ def test_every_text_artifact_is_a_new_artifact(replies):
 @pytest.mark.parametrize(
     ("command", "node"),
     [
-        ("config", config_node),
-        ("react", react_node),
-        ("composite", composite_node),
-        ("attachment", attachment_node),
+        ("config", config.with_sdk),
+        ("react", react.with_sdk),
+        ("attachment", attachment.with_sdk),
     ],
 )
-def test_a_turn_that_does_nothing_says_why_in_a_message(command, node, monkeypatch, replies):
-    """No environment, no distribution, no stream writer: nothing is produced, so no artifact."""
-    monkeypatch.setattr(artifacts_module, "get_stream_writer", lambda: None)
-
+def test_a_turn_that_does_nothing_says_why_in_a_message(command, node, replies):
+    """No environment, no distribution, no file: nothing is produced, so no artifact."""
     update = _run(node, command)
 
     assert len(replies) == 1
@@ -131,7 +120,7 @@ def test_a_turn_that_does_nothing_says_why_in_a_message(command, node, monkeypat
 
 def test_hand_built_artifact_keeps_every_field_and_is_explained_in_a_message(replies):
     """`artifact` sends an Artifact built field by field, then describes it in a message."""
-    update = _run(artifact_node, "artifact")
+    update = _run(artifact.with_sdk, "artifact")
 
     hand_built, explanation = replies
     assert isinstance(hand_built.content, Artifact)
@@ -149,7 +138,7 @@ def test_hand_built_artifact_keeps_every_field_and_is_explained_in_a_message(rep
 
 def test_cards_follow_their_explanation(replies):
     """The cards are the answer, so the explanation goes first and the cards close the turn."""
-    update = _run(card_node, "card")
+    update = _run(card.with_sdk, "card")
 
     assert message_text(replies[0]).endswith(_footer("card"))
     assert [type(reply.content) for reply in replies[1:]] == [Card, Card]
@@ -159,8 +148,8 @@ def test_cards_follow_their_explanation(replies):
 @pytest.mark.parametrize(
     ("command", "node", "names"),
     [
-        ("file", file_node, ["units.csv", "rfc9110.txt"]),
-        ("data", data_node, ["totals"]),
+        ("file", file.with_sdk, ["units.csv", "rfc9110.txt"]),
+        ("data", data.with_sdk, ["totals"]),
     ],
 )
 def test_artifacts_are_explained_in_a_message(command, node, names, replies):
@@ -174,9 +163,9 @@ def test_artifacts_are_explained_in_a_message(command, node, names, replies):
 
 def test_composite_chunks_are_explained_in_a_message(monkeypatch, replies):
     events: list = []
-    monkeypatch.setattr(artifacts_module, "get_stream_writer", lambda: events.append)
+    monkeypatch.setattr(composite, "get_stream_writer", lambda: events.append)
 
-    update = _run(composite_node, "composite")
+    update = _run(composite.with_sdk, "composite")
 
     assert len(events) == 3
     assert len({event.artifact.artifact_id for event in events}) == 1
@@ -189,10 +178,10 @@ def test_composite_chunks_are_explained_in_a_message(monkeypatch, replies):
 def test_ask_waits_on_the_question_and_answers_after_resume_with_an_artifact(monkeypatch, replies):
     """The explanation is a message kept in the conversation, the question is the interrupt
     value the input-required status shows, and what follows the resume is the task's answer."""
-    asked = _run(ask_node, "ask")
+    asked = _run(ask.with_sdk, "ask")
 
     assert _kept(asked) == [message_text(replies[0])]
-    assert QUESTION not in replies[0].content
+    assert ask.QUESTION not in replies[0].content
 
     interrupted: list = []
 
@@ -200,17 +189,17 @@ def test_ask_waits_on_the_question_and_answers_after_resume_with_an_artifact(mon
         interrupted.append(value)
         return {"messages": [HumanMessage("staging")]}
 
-    monkeypatch.setattr(hitl_module, "interrupt", fake_interrupt)
-    answered = _run(ask_wait_node, "ask")
+    monkeypatch.setattr(ask, "interrupt", fake_interrupt)
+    answered = _run(ask.wait, "ask")
 
-    assert interrupted == [QUESTION]
+    assert interrupted == [ask.QUESTION]
     assert 'continuing with "staging"' in answer_text(replies[1])
     assert answered == {}
 
 
 def test_metadata_sends_its_message_its_data_and_an_explanation(replies):
     """The data artifact is the result; the message with metadata and the explanation are messages."""
-    update = _run(metadata_node, "metadata")
+    update = _run(metadata.with_sdk, "metadata")
 
     message, data, explanation = replies
     assert message_text(message) == "This message carries metadata."
@@ -222,18 +211,18 @@ def test_metadata_sends_its_message_its_data_and_an_explanation(replies):
 
 
 def test_explicit_task_goes_to_the_outbox_and_is_explained_in_a_message(replies):
-    update = _run(task_node, "task")
+    update = _run(task.with_sdk, "task")
 
-    task = update["a2a_outbox"].task
-    assert task.artifacts[0].name == "explicit_artifact"
-    assert task.history[0].parts[0].text == "First message of the explicit task history."
-    assert dict(task.metadata) == {"built_by": "showcase"}
+    built = update["a2a_outbox"].task
+    assert built.artifacts[0].name == "explicit_artifact"
+    assert built.history[0].parts[0].text == "First message of the explicit task history."
+    assert dict(built.metadata) == {"built_by": "showcase"}
     assert message_text(replies[0]).endswith(_footer("task"))
     assert _kept(update) == [replies[0].content]
 
 
 def test_explicit_message_goes_to_the_outbox_and_is_explained_in_a_message(replies):
-    update = _run(message_node, "message")
+    update = _run(message.with_sdk, "message")
 
     assert update["a2a_outbox"].message.parts[0].text == "An explicit A2A message, built by the agent."
     assert message_text(replies[0]).endswith(_footer("message"))
@@ -243,16 +232,16 @@ def test_explicit_message_goes_to_the_outbox_and_is_explained_in_a_message(repli
 def test_failure_is_explained_in_a_message_and_raised_with_its_reason(replies):
     """A failed task has no result: the explanation is a message, the reason is the error's."""
     with pytest.raises(TaskFailedError) as failure:
-        _run(fail_node, "fail")
+        _run(fail.with_sdk, "fail")
 
-    assert failure.value.reason == FAIL_REASON
+    assert failure.value.reason == fail.REASON
     assert len(replies) == 1
     assert message_text(replies[0]).endswith(_footer("fail"))
 
 
 def test_stream_answers_through_the_stream(replies):
     """`stream` hands reply() an iterator; the streamed message is kept in state."""
-    update = _run(stream_node, "stream")
+    update = _run(stream.with_sdk, "stream")
 
     assert hasattr(replies[0].content, "__aiter__")
     assert update["messages"][0].content.endswith(_footer("stream"))
@@ -260,7 +249,7 @@ def test_stream_answers_through_the_stream(replies):
 
 def test_thinking_shares_its_thoughts_before_the_answer(replies, thoughts):
     """Thoughts go through ``thread.thinking()``, not into a reply."""
-    _run(thinking_node, "thinking")
+    _run(thinking.with_sdk, "thinking")
 
     assert thoughts == ["Looking that up…", "Almost there…"]
     assert len(replies) == 1
@@ -268,7 +257,7 @@ def test_thinking_shares_its_thoughts_before_the_answer(replies, thoughts):
 
 def test_sections_streams_twice_around_a_thought(replies, thoughts):
     """Two streamed sections with a step between; both are kept in state, then explained."""
-    update = _run(sections_node, "sections")
+    update = _run(sections.with_sdk, "sections")
 
     first, second, explanation = replies
     assert hasattr(first.content, "__aiter__") and hasattr(second.content, "__aiter__")
@@ -280,14 +269,14 @@ def test_sections_streams_twice_around_a_thought(replies, thoughts):
 
 def test_post_carries_no_route_and_the_reply_explains_it(replies):
     """`post` is called without a target; the explanation goes through `reply`."""
-    update = _run(post_node, "post")
+    update = _run(post.with_sdk, "post")
 
     posted, explanation = replies
-    assert (posted.via, posted.target, posted.content) == ("post", None, POSTED)
+    assert (posted.via, posted.target, posted.content) == ("post", None, post.POSTED)
     assert explanation.via == "reply"
     assert "direct A2A call" in message_text(explanation)
     assert message_text(explanation).endswith(_footer("post"))
-    assert _kept(update) == [POSTED, explanation.content]
+    assert _kept(update) == [post.POSTED, explanation.content]
 
 
 def test_attachment_describes_every_file_of_the_inbound_message(replies):
@@ -302,7 +291,7 @@ def test_attachment_describes_every_file_of_the_inbound_message(replies):
         ],
     )
 
-    update = _run(attachment_node, "attachment", AionRuntimeContext(inbox=A2AInbox(message=inbound)))
+    update = _run(attachment.with_sdk, "attachment", AionRuntimeContext(inbox=A2AInbox(message=inbound)))
 
     text = answer_text(replies[0])
     assert "2 file(s)" in text
@@ -314,7 +303,7 @@ def test_attachment_describes_every_file_of_the_inbound_message(replies):
 
 def test_a_card_button_lands_on_the_command_it_names(replies):
     """Every button with an id names a command, and a press resolves to it."""
-    _run(_card_node, "card")
+    _run(card.with_sdk, "card")
 
     ids = [
         found
@@ -323,6 +312,6 @@ def test_a_card_button_lands_on_the_command_it_names(replies):
     ]
     assert ids
     for action_id in ids:
-        assert parse_command(action_id) is not None
-        pressed = asyncio.run(handle_card_action(SimpleNamespace(payload=SimpleNamespace(action_id=action_id))))
+        assert parse_input(action_id).key == action_id
+        pressed = asyncio.run(read_card_action(SimpleNamespace(payload=SimpleNamespace(action_id=action_id))))
         assert pressed["command"] == action_id

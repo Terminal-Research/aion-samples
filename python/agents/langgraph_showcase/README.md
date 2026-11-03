@@ -7,6 +7,12 @@ produced what you just saw and which file it lives in. That call is written in t
 the footer names — no reply helper stands between the two, so every demonstration reads
 as the SDK code you would write yourself.
 
+Add `native` after a keyword — `stream native`, `file native` — and the same
+demonstration runs with LangGraph alone: no `Thread`, no SDK helper, only what the
+framework does by itself once the Aion server runs it. Where LangGraph has no way of its
+own, `… native` says so and names the SDK call to use. The menu marks every command
+`native ✓` or `native —`, and the table below says how.
+
 Every answer is text the agent already knows, so what you are looking at is platform
 behaviour rather than model output. What a command produces is the task's result, and a
 result is an artifact: files, data, a hand-built artifact, or — when the answer is text —
@@ -70,30 +76,30 @@ Send `help` to get the menu — every demonstration is one keyword away from the
 
 ## What to send, and what you get back
 
-| Send | What happens | Implemented in |
-| --- | --- | --- |
-| `help` | Menu, as a text artifact | [src/nodes/menu.py](src/nodes/menu.py) |
-| `stream` | The answer arrives a few words at a time, paced, as the task's `aion:stream-delta` artifact | [src/nodes/messaging.py](src/nodes/messaging.py) |
-| `sections` | Two streamed sections with a thought between them; the stream shows both, the task keeps the second | [src/nodes/messaging.py](src/nodes/messaging.py) |
-| `llm {prompt}` | A model answers the prompt; its tokens stream straight out of the model call, no `Thread` involved | [src/nodes/llm.py](src/nodes/llm.py) |
-| `thinking` | Two thoughts, kept in the task's `aion:thinking-delta` artifact rather than the history | [src/nodes/messaging.py](src/nodes/messaging.py) |
-| `card` | A card composed from typed components, and one referenced by URL | [src/nodes/cards.py](src/nodes/cards.py) |
-| `artifact` | An artifact built by hand from `a2a.types.Artifact` — its own id, a name, one text part and custom metadata — then a message explaining it | [src/nodes/artifacts.py](src/nodes/artifacts.py) |
-| `file` | Two file artifacts: inline bytes, and a remote URL | [src/nodes/artifacts.py](src/nodes/artifacts.py) |
-| `data` | A structured data artifact instead of prose | [src/nodes/artifacts.py](src/nodes/artifacts.py) |
-| `composite` | One artifact delivered as three appended chunks | [src/nodes/artifacts.py](src/nodes/artifacts.py) |
-| `ask` | The agent says it needs input, waits in the input-required state with the question as its status message, and answers where it stopped | [src/nodes/hitl.py](src/nodes/hitl.py) |
-| `react` | A reaction is added to your message, then removed | [src/nodes/messaging.py](src/nodes/messaging.py) |
-| `post` | A message posted without a route, then a reply that carries the route of your message | [src/nodes/messaging.py](src/nodes/messaging.py) |
-| `metadata` | Custom metadata attached to a message and to a data artifact | [src/nodes/messaging.py](src/nodes/messaging.py) |
-| `progress` | Progress reported while work is still running | [src/nodes/tasks.py](src/nodes/tasks.py) |
-| `task` | An explicit A2A Task, built by the agent, placed in the outbox | [src/nodes/tasks.py](src/nodes/tasks.py) |
-| `message` | An explicit A2A Message placed in the outbox | [src/nodes/tasks.py](src/nodes/tasks.py) |
-| `fail` | The task fails on purpose: an explanation in a message, the reason in the message of the FAILED status | [src/nodes/tasks.py](src/nodes/tasks.py) |
-| `context` | What the agent knows about this conversation and its caller | [src/nodes/context.py](src/nodes/context.py) |
-| `attachment` | The files attached to your message — name, type, size or link | [src/nodes/context.py](src/nodes/context.py) |
-| `config` | Configuration values the control plane passed to this deployment | [src/nodes/config.py](src/nodes/config.py) |
-| `http` | The custom HTTP routes this agent serves next to A2A | [src/api.py](src/api.py) |
+| Send | What happens | With LangGraph alone (`… native`) | Implemented in |
+| --- | --- | --- | --- |
+| `help` | Menu, as a text artifact |  | [src/commands/help.py](src/commands/help.py) |
+| `stream` | The answer arrives a few words at a time, paced, as the task's `aion:stream-delta` artifact | ✓ a chat model called in a node streams by itself | [src/commands/stream.py](src/commands/stream.py) |
+| `sections` | Two streamed sections with a thought between them; the stream shows both, the task keeps the second | ✓ every chat model call in a turn streams a section of its own | [src/commands/sections.py](src/commands/sections.py) |
+| `llm {prompt}` | A model answers the prompt; its tokens stream straight out of the model call, no `Thread` involved | ✓ the chat model's own astream(), which `llm` already uses; the SDK supplies only the model | [src/commands/llm.py](src/commands/llm.py) |
+| `thinking` | Two thoughts, kept in the task's `aion:thinking-delta` artifact rather than the history | — a model's reasoning does not reach the client | [src/commands/thinking.py](src/commands/thinking.py) |
+| `card` | A card composed from typed components, and one referenced by URL | — cards belong to the platform | [src/commands/card.py](src/commands/card.py) |
+| `artifact` | An artifact built by hand from `a2a.types.Artifact` — its own id, a name, one text part and custom metadata — then a message explaining it | — LangGraph has no artifacts | [src/commands/artifact.py](src/commands/artifact.py) |
+| `file` | Two file artifacts: inline bytes, and a remote URL | ✓ a file block in an AIMessage, which arrives as part of a message | [src/commands/file.py](src/commands/file.py) |
+| `data` | A structured data artifact instead of prose | — LangGraph has no data parts | [src/commands/data.py](src/commands/data.py) |
+| `composite` | One artifact delivered as three appended chunks | — LangGraph has no artifacts to send in chunks | [src/commands/composite.py](src/commands/composite.py) |
+| `ask` | The agent says it needs input, waits in the input-required state with the question as its status message, and answers where it stopped | ✓ interrupt(), which `ask` already uses | [src/commands/ask.py](src/commands/ask.py) |
+| `react` | A reaction is added to your message, then removed | — reactions belong to the platform | [src/commands/react.py](src/commands/react.py) |
+| `post` | A message posted without a route, then a reply that carries the route of your message | — routes belong to the platform | [src/commands/post.py](src/commands/post.py) |
+| `metadata` | Custom metadata attached to a message and to a data artifact | — an AIMessage's additional_kwargs do not reach the client | [src/commands/metadata.py](src/commands/metadata.py) |
+| `progress` | Progress reported while work is still running | — what get_stream_writer() writes does not reach the client | [src/commands/progress.py](src/commands/progress.py) |
+| `task` | An explicit A2A Task, built by the agent, placed in the outbox | — an A2A Task belongs to the platform | [src/commands/task.py](src/commands/task.py) |
+| `message` | An explicit A2A Message placed in the outbox | ✓ an AIMessage returned from a node | [src/commands/message.py](src/commands/message.py) |
+| `fail` | The task fails on purpose: an explanation in a message, the reason in the message of the FAILED status | ✓ any exception raised in a node, which the caller sees only as an unexpected error | [src/commands/fail.py](src/commands/fail.py) |
+| `context` | What the agent knows about this conversation and its caller | ✓ config['configurable']['thread_id'] | [src/commands/context.py](src/commands/context.py) |
+| `attachment` | The files attached to your message — name, type, size or link | ✓ the file blocks of the HumanMessage in state | [src/commands/attachment.py](src/commands/attachment.py) |
+| `config` | Configuration values the control plane passed to this deployment | — deployment configuration comes from the platform | [src/commands/config.py](src/commands/config.py) |
+| `http` | The custom HTTP routes this agent serves next to A2A | — the platform's server mounts the agent's HTTP routes | [src/commands/http.py](src/commands/http.py) |
 
 Keywords are case-insensitive and tolerate a leading verb, so `card`, `Show me the card`
 and `/card` all select the same demonstration. Anything unrecognized returns the menu.
@@ -104,33 +110,30 @@ is handled by the same node as typing that keyword.
 
 ```
 src/
-  commands.py   registry — every demonstration is one entry here
-  router.py     free-form text (or a card button) -> command key -> node name
-  graph.py      every node and edge, spelled out one line at a time
-  state.py      conversation state
-  streaming.py  the chunked iterator `stream` and `sections` hand to reply()
-  replies.py    with_footer(): builds the reply text, sends nothing
-  api.py        custom HTTP routes, registered with the server
-  nodes/        the demonstrations, grouped by kind
+  graph.py      the graph: the event router, then the node of the command the turn asked for
+  commands/     one file per command; this is what to read
+    stream.py   COMMAND, then with_sdk(), then with_langgraph() when LangGraph can do it alone
+    …
+  tour/         the tour's own plumbing; an agent of your own needs none of it
+    command.py  Command: the key, a summary, the SDK call, and the native way or why there is none
+    routing.py  the keyword (or card button) and `native` -> node, and the `not_native` answer
+    menu.py     the menu and the examples aion.yaml lists
+    state.py    the graph state: the conversation, plus the keys the tour keeps
+    standins.py a text stream and a chat model that need no real model
 ```
 
-`src/commands.py` is the single source of truth for what the agent advertises: the menu,
-the response footers, the `/showcase/commands` endpoint and the `skills.examples` list in
-`aion.yaml` all come from it. The graph is not generated from it — nodes are named after
-command keys and wired by hand, so the wiring is readable as LangGraph rather than as a
-loop. To add a demonstration, add one registry entry, one node function, and one
-`add_node`/`add_edge` pair in `src/graph.py`.
+Every command is one file in `src/commands/`, named after its keyword. It starts with
+`COMMAND`, which says what the command is, which SDK call it shows, and how LangGraph
+does the same alone or why it cannot. Below it is `with_sdk`, the command done with the
+SDK, and `with_langgraph` when LangGraph can do it alone. `src/commands/__init__.py`
+lists the files in menu order, and the menu, the footers, the `/showcase/commands`
+endpoint and the `skills.examples` list in `aion.yaml` all come from that list. To add a
+demonstration, add one file and its name there.
 
 A node whose answer is a text artifact returns no message: `{}`, or only the other
-state keys it sets. A message returned into `messages` would be sent to the client as a
-message beside the artifact. A node that sends a message returns it into `messages`, so
-the conversation keeps it; the server recognises it as already sent. The `messages` state
-therefore holds the user's messages, the messages the agent sent — explanations, what
-`ask` says before it waits, the message `post` posts — and the streamed answers of
-`stream`, `sections` and `llm`, and that is what the `context` command counts. An answer
-sent as an artifact is not in graph state, so a later model call does not see it. A node
-that raises, as `fail` does, returns nothing: its explanation went out, but the state
-does not keep it.
+state keys it sets. A node that sends a message returns it into `messages`, so the
+conversation keeps it; the server recognises it as already sent. An answer sent as an
+artifact is not in graph state, so a later model call does not see it.
 
 `a2a_outbox` is declared with `A2AOutboxField`. The server reads the outbox from the
 updates of the run that wrote it, and on that field LangGraph does not checkpoint it:
@@ -184,10 +187,14 @@ the next turn does not find the last one's outbox in its state.
 poetry run pytest
 ```
 
-`tests/test_commands.py` covers parsing and the registry with no SDK needed, checks
+`tests/test_commands.py` covers the command files, parsing and the menu, checks
 that the call named in each footer really is written in the file the footer points at,
-and that the examples in `aion.yaml` are the registry's;
-`tests/test_graph.py` asserts the graph exposes a node for every command;
+and that the examples in `aion.yaml` are the commands';
+`tests/test_graph.py` asserts the graph exposes a node for every command and that
+routing, with `native` or without, lands on a node it has;
+`tests/test_native.py` checks that every command says whether LangGraph can do it
+alone, that the native nodes call nothing from the SDK, what each of them returns,
+and that `… native` for the rest names the SDK call to use;
 `tests/test_answers.py` runs the nodes with the thread captured and checks what each
 command sends: a text artifact when the answer is text, and a message kept in state for
 an explanation beside a result, a turn that does nothing and the demonstrated messages;

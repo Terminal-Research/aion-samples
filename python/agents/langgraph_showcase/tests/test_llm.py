@@ -15,8 +15,9 @@ from aion.core.exceptions import TaskFailedError
 from aion.core.runtime import AionRuntimeContext
 from langchain_core.messages import AIMessageChunk
 
-from src.nodes import llm as llm_module
-from src.nodes.llm import USAGE, llm_node
+from src.commands import llm as llm_module
+from src.commands.llm import USAGE
+from src.commands.llm import with_sdk as llm_node
 from tests.support import message_text
 
 ANSWER_CHUNKS = ("Hello", ", ", "world")

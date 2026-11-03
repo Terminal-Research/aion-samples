@@ -20,7 +20,8 @@ aion:
           name: "Feature Showcase"
           description: >-
             Each keyword runs one demonstration and answers with the SDK call
-            that produced it. Send "help" for the menu.
+            that produced it; add "native" after it to see the same done with
+            LangGraph alone. Send "help" for the menu.
           tags: [ "showcase", "streaming", "artifacts", "cards", "a2a" ]
           examples:
             - "help"
@@ -45,6 +46,15 @@ aion:
             - "attachment"
             - "config"
             - "http"
+            - "stream native"
+            - "sections native"
+            - "llm native What is the A2A protocol?"
+            - "file native"
+            - "ask native"
+            - "message native"
+            - "fail native"
+            - "context native"
+            - "attachment native"
 
       # Filled in per environment by an administrator and delivered with the
       # invocation. The `config` command reads these back.

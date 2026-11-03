@@ -1,0 +1,191 @@
+"""`llm`: a model answers your prompt through the platform's model service.
+
+The model call is LangChain's own ``astream()``; the SDK supplies only the
+model, ``aion_chat_openai()``. So ``llm native`` runs this command as it is.
+"""
+
+from __future__ import annotations
+
+import logging
+
+from aion.api.exceptions import AionAuthenticationError
+from aion.core.exceptions import TaskFailedError
+from aion.core.runtime import AionRuntimeContext
+from aion.langgraph.authoring.invocation import Thread
+from aion.langgraph.authoring.models import aion_chat_openai
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langgraph.runtime import Runtime
+
+from src.tour import Command, TourState
+
+logger = logging.getLogger(__name__)
+
+COMMAND = Command(
+    key="llm",
+    summary="A model answers your prompt through the platform's model service",
+    api="aion_chat_openai(model).astream()",
+    native="the chat model's own astream(), which `llm` already uses; the SDK supplies only the model",
+    argument_hint="prompt",
+)
+
+SYSTEM_PROMPT = (
+    "You are the `llm` command of a showcase agent on the Aion platform. "
+    "Answer the question briefly, in plain text."
+)
+
+USAGE = "Send a question after the keyword, e.g. `llm What is the A2A protocol?`."
+
+
+async def with_sdk(state: TourState, *, runtime: Runtime[AionRuntimeContext]) -> dict:
+    """Send the prompt to the model this environment selects, and let the answer stream.
+
+    The server streams LangGraph's ``messages`` mode, so the model's chunks
+    reach the client as they arrive, in ``aion:stream-delta``. The model is the
+    ``model`` field of the environment's configuration, and the model service
+    answers only a turn the platform delivered. A refused or failed call ends
+    the task as failed, with the explanation as its reason.
+    """
+    thread = Thread.from_context(runtime.context)
+
+    prompt = (state.get("argument") or "").strip()
+    if not prompt:
+        reply = await thread.reply(USAGE + COMMAND.footer)
+        return {"messages": [reply]}
+
+    environment = runtime.context.get_environment()
+    model = environment.get_configuration_variable("model") if environment else None
+    if not model:
+        reply = await thread.reply("\n".join(_no_model(environment is not None)) + COMMAND.footer)
+        return {"messages": [reply]}
+    chat = aion_chat_openai(model)
+
+    try:
+        chunks = [
+            chunk
+            async for chunk in chat.astream([SystemMessage(SYSTEM_PROMPT), HumanMessage(prompt)])
+        ]
+    except Exception as exc:
+        refusal = _refusal(exc)
+        # A refusal is expected and self-explanatory; anything else keeps its traceback.
+        logger.warning(
+            "Model %s did not answer (code %s): %s",
+            model,
+            getattr(exc, "code", None),
+            refusal or exc,
+            exc_info=refusal is None,
+        )
+        raise TaskFailedError("\n".join(_explain(model, exc, refusal))) from exc
+
+    answer = "".join(_text(chunk.content) for chunk in chunks)
+    footer = await thread.reply(
+        f"Answered by `{model}`, the `model` field of this environment's configuration." + COMMAND.footer
+    )
+    # Keep the id the chunks streamed under: LangGraph recognises the message as
+    # the one already sent and does not send it again as a new one.
+    streamed_id = chunks[0].id if chunks else None
+    return {"messages": [AIMessage(content=answer, id=streamed_id), footer]}
+
+
+def _text(content: object) -> str:
+    """Return the text of a chunk's content, whether a string or content blocks."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "".join(
+            block.get("text", "") if isinstance(block, dict) else str(block) for block in content
+        )
+    return ""
+
+
+def _no_model(has_environment: bool) -> list[str]:
+    """Answer lines for a turn that selects no model; no call is made for it."""
+    if not has_environment:
+        return [
+            "No model call was made: this turn carries no environment, so no model is selected.",
+            "",
+            "`llm` uses the `model` field of the environment's configuration, which arrives "
+            "with a turn the platform delivers.",
+        ]
+    return [
+        "No model call was made: this environment has no model selected.",
+        "",
+        "Set the `model` field of its configuration to a model from Resources > Models, "
+        "then send `llm` again.",
+    ]
+
+
+def _refusal(exc: BaseException) -> AionAuthenticationError | None:
+    """Return the SDK error behind a failed call, if that is what it was.
+
+    A refusal by the SDK — no credentials, no principal — is an
+    ``AionAuthenticationError`` (the principal error is a subclass). It arrives
+    wrapped in the client library's connection error, with the SDK's own
+    explanation as the cause.
+    """
+    cause: BaseException | None = exc
+    while cause is not None:
+        if isinstance(cause, AionAuthenticationError):
+            return cause
+        cause = cause.__cause__
+    return None
+
+
+MODEL_SERVICE_DOCS = "https://docs.aion.to/docs/resources/model-service#troubleshoot-a-request"
+"""Where the model service documents its error codes."""
+
+ADVICE = {
+    "model_not_found": (
+        "Copy the exact model ID from Resources > Models into the `model` field of this "
+        "environment's configuration, then send `llm` again."
+    ),
+    "model_not_supported": (
+        "Set the `model` field of this environment's configuration to a text-producing "
+        "model from Resources > Models, then send `llm` again."
+    ),
+    "model_authorization_denied": (
+        "The call ran as this environment's Daemon Identity, and its role does not include "
+        "`model.execute` in the organization. Give the Daemon Identity a role that covers "
+        "models — of the agent roles, Organization Agent does — then send `llm` again. "
+        "A personal API key acts as its user, who needs `model.execute` instead."
+    ),
+    "insufficient_credits": "The organization is out of Aion credits; review its credit balance.",
+    "billing_organization_required": (
+        "The call is not tied to an active organization; deploy the agent in one, or use "
+        "runtime credentials that belong to one."
+    ),
+    "credit_policy_suspended": (
+        "The organization's credit policy is suspended; ask an organization administrator to "
+        "review it."
+    ),
+}
+"""What to do about each error code the model service documents."""
+
+
+def _explain(model: str, exc: BaseException, refusal: AionAuthenticationError | None) -> list[str]:
+    """Turn a failed model call into the lines of the task's failure reason.
+
+    Whoever refused the call explains it best, so its words are shown verbatim:
+    the SDK's, when it refused before sending, or the model service's. The
+    service also sends a stable error ``code``; the advice is chosen by that
+    code, never by the wording of the message, which may change.
+    """
+    if refusal is not None:
+        return ["No model call was made.", "", str(refusal)]
+
+    # The OpenAI client's errors carry the service's ``message`` and ``code``;
+    # read them by name so any other failure falls through to the generic advice.
+    said = getattr(exc, "message", None)
+    code = getattr(exc, "code", None)
+    lines = [f"Model `{model}` did not answer ({type(exc).__name__})."]
+    if isinstance(said, str) and said.strip():
+        lines += ["", f"The model service said: {said.strip()}"]
+    advice = ADVICE.get(code) if isinstance(code, str) else None
+    if advice is not None:
+        return lines + ["", advice]
+    return lines + [
+        "",
+        "If the model is not in the catalog, set the `model` field of this environment's "
+        "configuration to one from Resources > Models. If a permission is missing, the "
+        "environment's Daemon Identity needs a role with `model.execute`. Every error code "
+        f"is explained at {MODEL_SERVICE_DOCS}",
+    ]

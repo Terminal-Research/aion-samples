@@ -7,6 +7,12 @@ produced what you just saw and which file it lives in. That call is written in t
 the footer names — no reply helper stands between the two, so every demonstration reads
 as the SDK code you would write yourself.
 
+Add `native` after a keyword — `stream native`, `artifact native` — and the same
+demonstration runs with ADK alone: no `Thread`, no SDK helper, only the ADK events and
+services the framework offers once the Aion server runs it. Where ADK has no way of its
+own, `… native` says so and names the SDK call to use. The menu marks every command
+`native ✓` or `native —`, and the table below says how.
+
 Every answer is text the agent already knows, so what you are looking at is platform
 behaviour rather than model output. What a command produces is the task's result, and a
 result is an artifact: files, data, a hand-built artifact, or — when the answer is text —
@@ -56,30 +62,30 @@ Send `help` to get the menu — every demonstration is one keyword away from the
 
 ## What to send, and what you get back
 
-| Send | What happens | Implemented in |
-| --- | --- | --- |
-| `help` | Menu, as a text artifact | [src/handlers/menu.py](src/handlers/menu.py) |
-| `stream` | The answer arrives a few words at a time, paced, as the task's `aion:stream-delta` artifact | [src/handlers/messaging.py](src/handlers/messaging.py) |
-| `sections` | Two streamed sections with a thought between them; the stream shows both, the task keeps the second | [src/handlers/messaging.py](src/handlers/messaging.py) |
-| `llm {prompt}` | An `LlmAgent` on the platform's model answers the prompt; its events stream the tokens, no `Thread` involved | [src/handlers/llm.py](src/handlers/llm.py) |
-| `thinking` | Two thoughts, kept in the task's `aion:thinking-delta` artifact rather than the history | [src/handlers/messaging.py](src/handlers/messaging.py) |
-| `card` | A card composed from typed components, and one referenced by URL | [src/handlers/cards.py](src/handlers/cards.py) |
-| `artifact` | An artifact built by hand — its own id, a name, one text part and custom metadata | [src/handlers/artifacts.py](src/handlers/artifacts.py) |
-| `file` | Two file artifacts: inline bytes, and a remote URL | [src/handlers/artifacts.py](src/handlers/artifacts.py) |
-| `data` | A structured data artifact instead of prose | [src/handlers/artifacts.py](src/handlers/artifacts.py) |
-| `composite` | One artifact delivered as three appended chunks | [src/handlers/artifacts.py](src/handlers/artifacts.py) |
-| `ask` | The agent says it needs input, waits in the input-required state with the question as its status message, and answers where it stopped | [src/handlers/hitl.py](src/handlers/hitl.py) |
-| `react` | A reaction is added to your message, then removed | [src/handlers/messaging.py](src/handlers/messaging.py) |
-| `post` | A message posted without a route, then a reply that carries the route of your message | [src/handlers/messaging.py](src/handlers/messaging.py) |
-| `metadata` | Custom metadata attached to a message and to an artifact | [src/handlers/messaging.py](src/handlers/messaging.py) |
-| `progress` | Progress reported while work is still running | [src/handlers/tasks.py](src/handlers/tasks.py) |
-| `task` | An explicit A2A Task, built by the agent, placed in the outbox | [src/handlers/tasks.py](src/handlers/tasks.py) |
-| `message` | An explicit A2A Message placed in the outbox | [src/handlers/tasks.py](src/handlers/tasks.py) |
-| `fail` | The task fails on purpose: an explanation in a message, the reason in the message of the FAILED status | [src/handlers/tasks.py](src/handlers/tasks.py) |
-| `context` | What the agent knows about this conversation and its caller | [src/handlers/context.py](src/handlers/context.py) |
-| `attachment` | The files attached to your message — name, type, size or link | [src/handlers/context.py](src/handlers/context.py) |
-| `config` | Configuration values the control plane passed to this deployment | [src/handlers/config.py](src/handlers/config.py) |
-| `http` | The custom HTTP routes this agent serves next to A2A | [src/api.py](src/api.py) |
+| Send | What happens | With ADK alone (`… native`) | Implemented in |
+| --- | --- | --- | --- |
+| `help` | Menu, as a text artifact |  | [src/commands/help.py](src/commands/help.py) |
+| `stream` | The answer arrives a few words at a time, paced, as the task's `aion:stream-delta` artifact | ✓ Event(partial=True) for every chunk, then one event with the whole text | [src/commands/stream.py](src/commands/stream.py) |
+| `sections` | Two streamed sections with a thought between them; the stream shows both, the task keeps the second | ✓ every run of partial events in a turn streams a section of its own | [src/commands/sections.py](src/commands/sections.py) |
+| `llm {prompt}` | An `LlmAgent` on the platform's model answers the prompt; its events stream the tokens, no `Thread` involved | ✓ the events of an LlmAgent, which `llm` already yields; the SDK supplies only the model | [src/commands/llm.py](src/commands/llm.py) |
+| `thinking` | Two thoughts, kept in the task's `aion:thinking-delta` artifact rather than the history | — a model's thought parts do not reach the client | [src/commands/thinking.py](src/commands/thinking.py) |
+| `card` | A card composed from typed components, and one referenced by URL | — cards belong to the platform | [src/commands/card.py](src/commands/card.py) |
+| `artifact` | An artifact built by hand — its own id, a name, one text part and custom metadata | ✓ save_artifact(), which keeps a version of the artifact per save | [src/commands/artifact.py](src/commands/artifact.py) |
+| `file` | Two file artifacts: inline bytes, and a remote URL | ✓ save_artifact() with an inline_data part | [src/commands/file.py](src/commands/file.py) |
+| `data` | A structured data artifact instead of prose | — an ADK part carries no structured data | [src/commands/data.py](src/commands/data.py) |
+| `composite` | One artifact delivered as three appended chunks | — save_artifact() replaces an artifact whole, it has no chunks | [src/commands/composite.py](src/commands/composite.py) |
+| `ask` | The agent says it needs input, waits in the input-required state with the question as its status message, and answers where it stopped | ✓ a long-running function call, which `ask` already makes | [src/commands/ask.py](src/commands/ask.py) |
+| `react` | A reaction is added to your message, then removed | — reactions belong to the platform | [src/commands/react.py](src/commands/react.py) |
+| `post` | A message posted without a route, then a reply that carries the route of your message | — routes belong to the platform | [src/commands/post.py](src/commands/post.py) |
+| `metadata` | Custom metadata attached to a message and to an artifact | ✓ Event(custom_metadata=...), which lands in the message's metadata | [src/commands/metadata.py](src/commands/metadata.py) |
+| `progress` | Progress reported while work is still running | — ADK has no progress of its own that reaches the client | [src/commands/progress.py](src/commands/progress.py) |
+| `task` | An explicit A2A Task, built by the agent, placed in the outbox | — an A2A Task belongs to the platform | [src/commands/task.py](src/commands/task.py) |
+| `message` | An explicit A2A Message placed in the outbox | ✓ a text event of the agent | [src/commands/message.py](src/commands/message.py) |
+| `fail` | The task fails on purpose: an explanation in a message, the reason in the message of the FAILED status | ✓ any exception raised in the agent, which the caller sees only as an unexpected error | [src/commands/fail.py](src/commands/fail.py) |
+| `context` | What the agent knows about this conversation and its caller | ✓ ctx.session.id and ctx.user_id | [src/commands/context.py](src/commands/context.py) |
+| `attachment` | The files attached to your message — name, type, size or link | ✓ the inline_data and file_data parts of ctx.user_content | [src/commands/attachment.py](src/commands/attachment.py) |
+| `config` | Configuration values the control plane passed to this deployment | — deployment configuration comes from the platform | [src/commands/config.py](src/commands/config.py) |
+| `http` | The custom HTTP routes this agent serves next to A2A | — the platform's server mounts the agent's HTTP routes | [src/commands/http.py](src/commands/http.py) |
 
 Every command except `stream` names the SDK call it demonstrates and the file it lives
 in, in a footer at the end of its text answer or of its explanation; `stream` streams
@@ -94,27 +100,30 @@ is handled by the same handler as typing that keyword.
 
 ```
 src/
-  commands.py   registry — every demonstration is one entry here
-  agent.py      BaseAgent subclass: keyword (or card button) -> handler
-  replies.py    with_footer(): builds the answer text, sends nothing
-  streaming.py  the chunked iterator `stream` and `sections` hand to reply()
-  api.py        custom HTTP routes, registered with the server
-  handlers/     the demonstrations, grouped by kind
+  agent.py      the agent: it reads the turn's keyword and runs that command
+  commands/     one file per command; this is what to read
+    stream.py   COMMAND, then with_sdk(), then with_adk() when ADK can do it alone
+    …
+  tour/         the tour's own plumbing; an agent of your own needs none of it
+    command.py  Command: the key, a summary, the SDK call, and the native way or why there is none
+    routing.py  the keyword (or card button) and `native` of a turn, and the `not_native` answer
+    menu.py     the menu and the examples aion.yaml lists
+    standins.py a text stream that needs no real model
 ```
 
-`src/commands.py` is the single source of truth for what the agent advertises: the menu,
-the response footers, the `/showcase/commands` endpoint and the `skills.examples` list in
-`aion.yaml` all come from it. Dispatch is not derived from it — `HANDLERS` in
-`src/agent.py` maps keys to handlers by hand. To add a demonstration, add one registry
-entry, one handler, and one line in that table.
+Every command is one file in `src/commands/`, named after its keyword. It starts with
+`COMMAND`, which says what the command is, which SDK call it shows, and how ADK does the
+same alone or why it cannot. Below it is `with_sdk`, the command done with the SDK, and
+`with_adk` when ADK can do it alone. `src/commands/__init__.py` lists the files in menu
+order, and the menu, the footers, the `/showcase/commands` endpoint and the
+`skills.examples` list in `aion.yaml` all come from that list. To add a demonstration,
+add one file and its name there.
 
-Every handler has the same signature, `(ctx, argument)`, where `argument` is whatever
-was typed after the keyword; a handler that accepts none ignores it. The only thing
-dispatch tells apart is what a handler returns: one that only talks through `Thread` is
-a coroutine, while one that yields an ADK event of its own — the long-running call
-`ask` pauses on, or the A2A outbox of `task` and `message` — is an async generator of
-ADK events. A turn that resumes `ask` goes to the handler that answers it, whatever its
-text says.
+Both take `(ctx, argument)`, where `argument` is whatever was typed after the keyword.
+One that only talks through `Thread` is a coroutine; one that yields ADK events of its
+own — the long-running call `ask` pauses on, the A2A outbox of `task` and `message`,
+every `with_adk` — is an async generator. A turn that resumes `ask` goes to
+`ask.answer`, whatever its text says.
 
 ## Notes on the platform
 
@@ -192,9 +201,9 @@ text says.
 poetry run pytest
 ```
 
-`tests/test_commands.py` covers parsing and the registry with no SDK needed, checks
+`tests/test_commands.py` covers the command files, parsing and the menu, checks
 that the call named in each footer really is written in the file the footer points at,
-and that the examples in `aion.yaml` are the registry's;
+and that the examples in `aion.yaml` are the commands';
 `tests/test_agent.py` asserts every command has a handler with the one dispatch
 signature, that dispatch resolves, and runs every handler to check what it sends, in
 order: a text artifact when the answer is text, the result and a message explaining it
@@ -203,6 +212,9 @@ also checks the call `ask` pauses on and the turn that resumes it, the reason `f
 raises, the thoughts of `thinking` and `sections`, the chunks of `composite`, the
 missing route of `post`, the files `attachment` describes, and that a card button lands
 on the command it names;
+`tests/test_native.py` checks that every command says whether ADK can do it alone, that
+the native handlers call nothing from the SDK, what each of them yields, and that
+`… native` for the rest names the SDK call to use;
 `tests/test_llm.py` runs the `llm` handler against a faked agent and checks where the
 model id comes from, that a missing prompt or model gets a message, and that a failed
 call fails the task with its explanation as the reason.

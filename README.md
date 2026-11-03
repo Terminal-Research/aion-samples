@@ -20,6 +20,9 @@ to see each platform feature on its own, one keyword per feature.
 Both showcase agents expose the same keywords, so you can read whichever framework you
 work in and skip the other. Where a framework's own mechanism differs — how a turn waits
 for the user, how an artifact grows — each sample explains its own, in its own terms.
+Add `native` after a keyword, `stream native` for example, to see the same demonstration
+done with the framework alone, without the SDK's API; where the framework has no way of
+its own, the agent says so and names the SDK call to use.
 
 The showcase agents write their own replies, so what you see is platform behaviour rather
 than model output. The one exception is the `llm` command, where a model from the Aion
