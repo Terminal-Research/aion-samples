@@ -62,6 +62,10 @@ npm install -g @terminal-research/aion
 aio --url http://localhost:8000 --agent-id showcase
 ```
 
+The SDK the sample installs ships the same client, so from the sample's directory
+`poetry run aion chat --url http://localhost:8000 --agent-id showcase` works too. On
+macOS it runs a binary bundled with the SDK; elsewhere it needs Node.js.
+
 Send `help` to get the menu — every demonstration is one keyword away from there.
 
 ## What to send, and what you get back

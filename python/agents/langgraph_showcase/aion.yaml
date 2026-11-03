@@ -10,8 +10,11 @@ aion:
         runtime context, deployment configuration and custom HTTP routes.
         Every other response is written by the agent itself.
       version: "1.0.0"
-      input_modes: [ "text" ]
-      output_modes: [ "text" ]
+      # Clients read these to know what they may send and what comes back:
+      # files for `attachment`, and the CSV, data and card parts the
+      # commands answer with.
+      input_modes: [ "text", "image", "application/pdf" ]
+      output_modes: [ "text", "text/csv", "json", "application/vnd.aion.card+jsx" ]
       skills:
         - id: "feature_showcase"
           name: "Feature Showcase"
