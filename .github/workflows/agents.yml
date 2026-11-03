@@ -1,0 +1,63 @@
+name: Agents
+
+# Every sample is installed on its own, the way a reader copies it out, then
+# its tests run and .github/scripts/smoke.py serves it with `aion serve` and
+# sends each example from its aion.yaml over A2A. Pushes to any branch and pull
+# requests check the latest edits; the weekly run catches a newer SDK that the
+# samples' version range admits.
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * 1"
+
+permissions:
+  contents: read
+
+# A newer push supersedes the checks still running for the same ref.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  POETRY_VERSION: 2.4.1
+
+jobs:
+  agent:
+    name: ${{ matrix.agent }} (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      # One sample failing says nothing about the others, so let them finish.
+      fail-fast: false
+      matrix:
+        agent: [langgraph_plain, adk_plain, langgraph_showcase, adk_showcase]
+        # The lowest and highest interpreter the samples' pyproject admits.
+        python-version: ["3.12", "3.14"]
+    defaults:
+      run:
+        working-directory: python/agents/${{ matrix.agent }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        id: python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Poetry
+        run: pipx install poetry==${{ env.POETRY_VERSION }}
+
+      - name: Install the sample
+        run: |
+          poetry env use "${{ steps.python.outputs.python-path }}"
+          poetry install --no-interaction
+
+      - name: Run its tests
+        run: poetry run pytest
+
+      - name: Serve it and run every example over A2A
+        run: poetry run python ../../../.github/scripts/smoke.py

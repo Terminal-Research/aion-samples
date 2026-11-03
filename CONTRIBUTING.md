@@ -34,3 +34,18 @@ Every sample has:
 Where a feature has no equivalent in a given framework, keep the command and have it say
 so explicitly. A visible "not available here, and here is why" is more useful to a reader
 than a silently missing feature.
+
+## Checks
+
+Every push and pull request runs `.github/workflows/agents.yml` for each sample: it
+installs the sample on its own, runs its tests, then `.github/scripts/smoke.py` serves it
+with `aion serve` and sends every skill example from its `aion.yaml` over A2A, once with
+SendMessage and once with SendStreamingMessage. A turn has to end `COMPLETED`, except
+`fail` (`FAILED`) and `ask` (`INPUT_REQUIRED`, then `COMPLETED` once answered). The run
+has no credentials, so every example must work without them.
+
+To run the same check locally, from a sample's directory:
+
+```bash
+poetry run python ../../../.github/scripts/smoke.py
+```
