@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 COMMAND = Command(
     key="llm",
-    summary="A model answers your prompt through the platform's model service",
+    summary="A model answers your prompt, and reads a file you attach, through the platform's model service",
     api="LlmAgent(model=aion_lite_llm(model))",
     native="the events of an LlmAgent, which `llm` already yields; the SDK supplies only the model",
     argument_hint="prompt",
@@ -32,10 +32,14 @@ COMMAND = Command(
 INSTRUCTION = (
     "You are the `llm` command of a showcase agent on the Aion platform. The "
     "user's message starts with the keyword `llm`, which routed it to you and "
-    "is not part of the question. Answer briefly, in plain text."
+    "is not part of the question. Answer briefly, in plain text. A file "
+    "attached to the message is part of the question."
 )
 
-USAGE = "Send a question after the keyword, e.g. `llm What is the A2A protocol?`."
+USAGE = (
+    "Send a question after the keyword, e.g. `llm What is the A2A protocol?`. "
+    "Attach a file and the model reads it."
+)
 
 
 async def with_sdk(ctx: AionInvocationContext, prompt: str) -> AsyncGenerator[Event, None]:
@@ -45,6 +49,11 @@ async def with_sdk(ctx: AionInvocationContext, prompt: str) -> AsyncGenerator[Ev
     model is the ``model`` field of the environment's configuration, and the
     model service answers only a turn the platform delivered. A refused or
     failed call ends the task as failed, with the explanation as its reason.
+
+    The ``LlmAgent`` reads the user's message as it arrived, so a file attached
+    to it reaches the model with no code here. On a deployment that stores
+    files the message holds the file's address; the model the SDK builds
+    sends the file's content in its place.
     """
     thread = Thread.from_context(ctx.aion_runtime_context)
 
@@ -74,8 +83,10 @@ async def with_sdk(ctx: AionInvocationContext, prompt: str) -> AsyncGenerator[Ev
         )
         raise TaskFailedError("\n".join(_explain(model, exc, refusal))) from exc
 
+    files = thread.message.files if thread.message is not None else []
+    read = f" It was sent {len(files)} attached file(s), by their content." if files else ""
     await thread.reply(
-        f"Answered by `{model}`, the `model` field of this environment's configuration." + COMMAND.footer
+        f"Answered by `{model}`, the `model` field of this environment's configuration.{read}" + COMMAND.footer
     )
 
 

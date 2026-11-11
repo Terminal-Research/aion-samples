@@ -14,7 +14,7 @@ from aion.core.exceptions import TaskFailedError
 from aion.core.runtime import AionRuntimeContext
 from aion.langgraph.authoring.invocation import Thread
 from aion.langgraph.authoring.models import aion_chat_openai
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, SystemMessage
 from langgraph.runtime import Runtime
 
 from src.tour import Command, TourState
@@ -23,18 +23,23 @@ logger = logging.getLogger(__name__)
 
 COMMAND = Command(
     key="llm",
-    summary="A model answers your prompt through the platform's model service",
+    summary="A model answers your prompt, and reads a file you attach, through the platform's model service",
     api="aion_chat_openai(model).astream()",
     native="the chat model's own astream(), which `llm` already uses; the SDK supplies only the model",
     argument_hint="prompt",
 )
 
 SYSTEM_PROMPT = (
-    "You are the `llm` command of a showcase agent on the Aion platform. "
-    "Answer the question briefly, in plain text."
+    "You are the `llm` command of a showcase agent on the Aion platform. The "
+    "user's message starts with the keyword `llm`, which routed it to you and "
+    "is not part of the question. Answer briefly, in plain text. A file "
+    "attached to the message is part of the question."
 )
 
-USAGE = "Send a question after the keyword, e.g. `llm What is the A2A protocol?`."
+USAGE = (
+    "Send a question after the keyword, e.g. `llm What is the A2A protocol?`. "
+    "Attach a file and the model reads it."
+)
 
 
 async def with_sdk(state: TourState, *, runtime: Runtime[AionRuntimeContext]) -> dict:
@@ -45,6 +50,11 @@ async def with_sdk(state: TourState, *, runtime: Runtime[AionRuntimeContext]) ->
     ``model`` field of the environment's configuration, and the model service
     answers only a turn the platform delivered. A refused or failed call ends
     the task as failed, with the explanation as its reason.
+
+    The model is given the user's message as it arrived, so a file attached
+    to it reaches the model with no code here. On a deployment that stores
+    files the message holds the file's address; the model the SDK builds
+    sends the file's content in its place.
     """
     thread = Thread.from_context(runtime.context)
 
@@ -59,11 +69,14 @@ async def with_sdk(state: TourState, *, runtime: Runtime[AionRuntimeContext]) ->
         await thread.reply(text_artifact("\n".join(_no_model(environment is not None)) + COMMAND.footer))
         return {}
     chat = aion_chat_openai(model)
+    # The user's message, as the server put it into the conversation: its text
+    # and its files.
+    user_message = state["messages"][-1]
 
     try:
         chunks = [
             chunk
-            async for chunk in chat.astream([SystemMessage(SYSTEM_PROMPT), HumanMessage(prompt)])
+            async for chunk in chat.astream([SystemMessage(SYSTEM_PROMPT), user_message])
         ]
     except Exception as exc:
         refusal = _refusal(exc)
@@ -78,8 +91,10 @@ async def with_sdk(state: TourState, *, runtime: Runtime[AionRuntimeContext]) ->
         raise TaskFailedError("\n".join(_explain(model, exc, refusal))) from exc
 
     answer = "".join(_text(chunk.content) for chunk in chunks)
+    files = thread.message.files if thread.message is not None else []
+    read = f" It was sent {len(files)} attached file(s), by their content." if files else ""
     footer = await thread.reply(
-        f"Answered by `{model}`, the `model` field of this environment's configuration." + COMMAND.footer
+        f"Answered by `{model}`, the `model` field of this environment's configuration.{read}" + COMMAND.footer
     )
     # Keep the id the chunks streamed under: LangGraph recognises the message as
     # the one already sent and does not send it again as a new one.

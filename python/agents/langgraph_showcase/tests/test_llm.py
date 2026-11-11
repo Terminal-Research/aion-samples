@@ -13,7 +13,7 @@ from aion.core.a2a.extensions.distribution import (
 from aion.api.exceptions import AionAuthenticationError
 from aion.core.exceptions import TaskFailedError
 from aion.core.runtime import AionRuntimeContext
-from langchain_core.messages import AIMessageChunk
+from langchain_core.messages import AIMessageChunk, HumanMessage
 
 from src.commands import llm as llm_module
 from src.commands.llm import USAGE
@@ -45,7 +45,8 @@ def _runtime(configuration: dict[str, str] | None = None) -> SimpleNamespace:
 
 
 def _state(argument: str) -> dict:
-    return {"messages": [], "command": "llm", "input_text": f"llm {argument}", "argument": argument}
+    text = f"llm {argument}"
+    return {"messages": [HumanMessage(text)], "command": "llm", "input_text": text, "argument": argument}
 
 
 def _failure(monkeypatch, error: BaseException, model: str = "some-model") -> str:
@@ -63,6 +64,7 @@ class _FakeChat:
         self.error = error
 
     async def astream(self, messages):
+        self.received = messages
         if self.error is not None:
             raise self.error
         for chunk in ANSWER_CHUNKS:
@@ -168,3 +170,22 @@ def test_unknown_code_gets_every_likely_cause(monkeypatch, replies):
     assert error.message in reason
     assert "`model.execute`" in reason and "`model`" in reason
     assert llm_module.MODEL_SERVICE_DOCS in reason
+
+
+def test_the_model_is_given_the_users_message_as_it_arrived(monkeypatch, replies):
+    """Text and files alike: the node hands the model the message from the conversation, unchanged."""
+    chat = _FakeChat()
+    monkeypatch.setattr(llm_module, "aion_chat_openai", lambda model, **kwargs: chat)
+    state = _state("What does the attached file say?")
+    state["messages"] = [
+        HumanMessage(
+            content=[
+                {"type": "text", "text": "llm What does the attached file say?"},
+                {"type": "file", "url": "https://files.test/report.pdf", "mime_type": "application/pdf"},
+            ]
+        )
+    ]
+
+    asyncio.run(llm_node(state, runtime=_runtime({"model": "some-model"})))
+
+    assert chat.received[-1] is state["messages"][-1]
