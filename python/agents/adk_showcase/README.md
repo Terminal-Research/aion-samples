@@ -187,8 +187,14 @@ every `with_adk` — is an async generator. A turn that resumes `ask` goes to
   refuses a call, the reason `llm` fails the task with quotes the service and, by its
   error code, says what to change; the codes are listed under Troubleshoot a request in
   the model service docs.
-- **An `LlmAgent` sees the session.** `llm` runs a child `LlmAgent` named `llm` on the
-  current invocation context, so the model's conversation history is the ADK session:
+- **`llm` is an ordinary ADK sub-agent.** `create_agent()` declares an `LlmAgent` named
+  `llm` in the showcase's `sub_agents`, and the `llm` command runs it the way an ADK agent
+  runs a sub-agent, `agent.run_async(ctx)`. ADK then knows every agent that answers in the
+  conversation, and the next turn comes back to the showcase. The model is the
+  environment's, known only once a turn arrives, so it is given to `aion_lite_llm` as a
+  function of the turn's runtime context, which the SDK calls before each request.
+- **An `LlmAgent` sees the session.** The `llm` sub-agent runs on the showcase's
+  invocation context, so the model's conversation history is the ADK session:
   every earlier user turn in this conversation, its own earlier answers as its own, and
   what the showcase sent through `Thread` as another agent's words — those events keep
   the root agent as their author, and ADK shows a model another author's words as
@@ -218,6 +224,6 @@ on the command it names;
 `tests/test_native.py` checks that every command says whether ADK can do it alone, that
 the native handlers call nothing from the SDK, what each of them yields, and that
 `… native` for the rest names the SDK call to use;
-`tests/test_llm.py` runs the `llm` handler against a faked agent and checks where the
-model id comes from, that a missing prompt or model gets a message, and that a failed
+`tests/test_llm.py` checks that `llm` is a declared sub-agent, runs the `llm` handler
+against a faked sub-agent and checks where the model id comes from, that a missing prompt or model gets a message, and that a failed
 call fails the task with its explanation as the reason.

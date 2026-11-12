@@ -10,7 +10,7 @@ from google.adk.agents import BaseAgent
 from google.adk.events import Event
 from typing_extensions import override
 
-from src.commands import BY_KEY, ask, help
+from src.commands import BY_KEY, ask, help, llm
 from src.tour.routing import inbound_text, not_native, parse_input
 
 
@@ -52,8 +52,14 @@ class ShowcaseAgent(BaseAgent):
 
 
 def create_agent() -> ShowcaseAgent:
-    """Build the agent; the Aion server runs it."""
+    """Build the agent; the Aion server runs it.
+
+    The `llm` command's ``LlmAgent`` is declared in ``sub_agents``, so ADK
+    knows the agents that answer in this conversation: a turn after `llm`
+    comes back to the showcase.
+    """
     return ShowcaseAgent(
         name="showcase",
         description="Guided tour of the Aion platform features, built with Google ADK",
+        sub_agents=[llm.build_agent()],
     )

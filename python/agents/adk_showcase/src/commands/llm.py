@@ -1,7 +1,8 @@
 """`llm`: a model answers your prompt through the platform's model service.
 
-The answer is an ordinary ``LlmAgent``'s events; the SDK supplies only the
-model, ``aion_lite_llm()``. So ``llm native`` runs this command as it is.
+The answer comes from an ordinary ``LlmAgent``, declared as a sub-agent of the
+showcase the way any ADK agent declares one; the SDK supplies only the model,
+``aion_lite_llm()``. So ``llm native`` runs this command as it is.
 """
 
 from __future__ import annotations
@@ -14,6 +15,7 @@ from aion.adk.authoring.models import aion_lite_llm
 from aion.api.exceptions import AionAuthenticationError
 from aion.core.a2a import text_artifact
 from aion.core.exceptions import TaskFailedError
+from aion.core.runtime import AionRuntimeContext
 from google.adk.agents import LlmAgent
 from google.adk.events import Event
 
@@ -24,7 +26,7 @@ logger = logging.getLogger(__name__)
 COMMAND = Command(
     key="llm",
     summary="A model answers your prompt, and reads a file you attach, through the platform's model service",
-    api="LlmAgent(model=aion_lite_llm(model))",
+    api="LlmAgent(model=aion_lite_llm(configured_model))",
     native="the events of an LlmAgent, which `llm` already yields; the SDK supplies only the model",
     argument_hint="prompt",
 )
@@ -42,8 +44,25 @@ USAGE = (
 )
 
 
+def build_agent() -> LlmAgent:
+    """The `llm` sub-agent; ``create_agent()`` declares it in the showcase's ``sub_agents``.
+
+    Whoever deploys the agent chooses the model, in the environment's
+    configuration, which arrives with every turn. So the model is given as
+    a function: the SDK calls it with the turn's runtime context before each
+    request.
+    """
+    return LlmAgent(name=COMMAND.key, model=aion_lite_llm(configured_model), instruction=INSTRUCTION)
+
+
+def configured_model(runtime: AionRuntimeContext | None) -> str | None:
+    """The `model` field of the environment's configuration, if the turn has one."""
+    environment = runtime.get_environment() if runtime is not None else None
+    return environment.get_configuration_variable("model") if environment is not None else None
+
+
 async def with_sdk(ctx: AionInvocationContext, prompt: str) -> AsyncGenerator[Event, None]:
-    """Hand the turn to an ``LlmAgent`` whose model is the platform's, and let its answer stream.
+    """Hand the turn to the `llm` sub-agent, and let its answer stream.
 
     The agent's partial events stream the tokens in ``aion:stream-delta``. The
     model is the ``model`` field of the environment's configuration, and the
@@ -61,13 +80,18 @@ async def with_sdk(ctx: AionInvocationContext, prompt: str) -> AsyncGenerator[Ev
         await thread.reply(text_artifact(USAGE + COMMAND.footer))
         return
 
-    environment = ctx.aion_runtime_context.get_environment()
-    model = environment.get_configuration_variable("model") if environment else None
+    # The model's requests get the model through `aion_lite_llm(configured_model)`.
+    # The command reads it too: without one it makes no call and says how to
+    # set it, and with one it names the model in the answer and in a failure.
+    model = configured_model(ctx.aion_runtime_context)
     if not model:
-        await thread.reply(text_artifact("\n".join(_no_model(environment is not None)) + COMMAND.footer))
+        has_environment = ctx.aion_runtime_context.get_environment() is not None
+        await thread.reply(text_artifact("\n".join(_no_model(has_environment)) + COMMAND.footer))
         return
-    agent = LlmAgent(name="llm", model=aion_lite_llm(model), instruction=INSTRUCTION)
 
+    # The sub-agent `create_agent()` declared; it runs on this turn's context,
+    # as an ADK agent runs its sub-agents.
+    agent = ctx.agent.find_sub_agent(COMMAND.key)
     try:
         async for event in agent.run_async(ctx):
             yield event
