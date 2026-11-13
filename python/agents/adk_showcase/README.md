@@ -78,6 +78,7 @@ Send `help` to get the menu — every demonstration is one keyword away from the
 | `data` | A structured data artifact instead of prose | — an ADK part carries no structured data | [src/commands/data.py](src/commands/data.py) |
 | `composite` | One artifact delivered as three appended chunks | — save_artifact() replaces an artifact whole, it has no chunks | [src/commands/composite.py](src/commands/composite.py) |
 | `ask` | The agent says it needs input, waits in the input-required state with the question as its status message, and answers where it stopped | ✓ a long-running function call, which `ask` already makes | [src/commands/ask.py](src/commands/ask.py) |
+| `confirm` | The agent asks to confirm deleting a cache, with a card of two buttons. The answer comes back unjudged: ADK's confirmation object as it is, a pressed button or a typed word as the confirmation's payload, and the agent decides what it means | ✓ a long-running confirmation call, which `confirm` already makes | [src/commands/confirm.py](src/commands/confirm.py) |
 | `react` | A reaction is added to your message, then removed | — reactions belong to the platform | [src/commands/react.py](src/commands/react.py) |
 | `post` | A message posted without a route, then a reply that carries the route of your message | — routes belong to the platform | [src/commands/post.py](src/commands/post.py) |
 | `metadata` | Custom metadata attached to a message and to an artifact | ✓ Event(custom_metadata=...), which lands in the message's metadata | [src/commands/metadata.py](src/commands/metadata.py) |
@@ -97,7 +98,9 @@ that footer with the rest of its answer.
 Keywords are case-insensitive and tolerate a leading verb, so `card`, `Show me the card`
 and `/card` all select the same demonstration. Anything unrecognized returns the menu.
 The card sent by `card` carries a button whose action id is a keyword, so pressing it
-is handled by the same handler as typing that keyword.
+is handled by the same handler as typing that keyword. The buttons of `confirm` answer
+its question instead: the task waits for the answer, and a pressed button comes back in
+the confirmation's payload with its action id, `approve` or `reject`.
 
 ## How it is put together
 

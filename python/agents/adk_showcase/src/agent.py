@@ -10,7 +10,7 @@ from google.adk.agents import BaseAgent
 from google.adk.events import Event
 from typing_extensions import override
 
-from src.commands import BY_KEY, ask, help, llm
+from src.commands import BY_KEY, ask, confirm, help, llm
 from src.tour.routing import inbound_text, not_native, parse_input
 
 
@@ -19,11 +19,15 @@ class ShowcaseAgent(BaseAgent):
 
     @override
     async def _run_async_impl(self, ctx: AionInvocationContext) -> AsyncGenerator[Event, None]:
-        # A turn that resumes `ask` carries the answer to the call the run
-        # paused on, not a new command.
+        # A turn that resumes `ask` or `confirm` carries the answer to the call
+        # the run paused on, not a new command.
         reply = ask.answered_question(ctx)
         if reply is not None:
             await ask.answer(ctx, reply)
+            return
+        confirmation = confirm.answered_confirmation(ctx)
+        if confirmation is not None:
+            await confirm.answer(ctx, confirmation)
             return
 
         text = inbound_text(ctx)
@@ -40,7 +44,7 @@ class ShowcaseAgent(BaseAgent):
         elif command.COMMAND.no_native:
             result = not_native(ctx, parsed.key)
         else:
-            # `ask` and `llm` already are ADK's own: `native` runs them as they are.
+            # `ask`, `confirm` and `llm` already are ADK's own: `native` runs them as they are.
             result = command.with_sdk(ctx, parsed.argument)
 
         # A command is a coroutine to await, or an async generator of ADK events to forward.

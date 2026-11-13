@@ -15,8 +15,9 @@ from aion.core.runtime import AionRuntimeContext
 from google.genai import types
 
 from src.agent import create_agent
-from src.commands import BY_KEY, COMMANDS, ask, composite, progress
+from src.commands import BY_KEY, COMMANDS, ask, composite, confirm, progress
 from src.commands.ask import QUESTION, REQUEST_INPUT, answered_question
+from src.commands.confirm import REQUEST_CONFIRMATION, agreed, answered_confirmation
 from src.commands.fail import REASON as FAIL_REASON
 from src.commands.post import POSTED
 from src.tour import standins
@@ -50,9 +51,11 @@ SENT = {
     "config": ["text"],
     "react": ["text"],
     "attachment": ["text"],
-    # Messages by nature: what `ask` says before it waits, the explanation of a
-    # failure, and the posted message beside its explanation.
+    # Messages by nature: what `ask` and `confirm` say before they wait (with
+    # the buttons of `confirm`), the explanation of a failure, and the posted
+    # message beside its explanation.
     "ask": ["message"],
+    "confirm": ["message", "card"],
     "fail": ["message"],
     "post": ["message", "message"],
 }
@@ -274,6 +277,59 @@ def test_a_resumed_turn_goes_to_the_answer_not_to_a_command(sent):
     assert asyncio.run(drain()) == []
     (content, _), = sent
     assert _is_text_artifact(content) and '"staging"' in content.parts[0].text
+
+
+def test_confirm_shows_two_buttons_then_pauses_on_a_confirmation_call(sent):
+    (event,) = _run(HANDLERS["confirm"])
+
+    (message, _), (card, _) = sent
+    assert "type your answer" in message
+    assert confirm.QUESTION in card.jsx
+    assert f'id="{confirm.APPROVE}"' in card.jsx and f'id="{confirm.REJECT}"' in card.jsx
+    (call,) = event.get_function_calls()
+    assert call.name == REQUEST_CONFIRMATION
+    assert call.args == {"toolConfirmation": {"hint": confirm.QUESTION, "confirmed": False}}
+    assert event.long_running_tool_ids == {call.id}
+
+
+def _confirmed(response: dict) -> types.Content:
+    """The user content of a turn that answers the `confirm` call."""
+    return types.Content(
+        role="user",
+        parts=[types.Part(function_response=types.FunctionResponse(
+            id="call-1", name=REQUEST_CONFIRMATION, response=response,
+        ))],
+    )
+
+
+@pytest.mark.parametrize(
+    "confirmation, meaning",
+    [
+        ({"confirmed": True}, True),
+        ({"confirmed": False}, False),
+        ({"payload": {"data": {"userId": "U1", "actionId": "approve"}}}, True),
+        ({"payload": {"data": {"userId": "U1", "actionId": "reject"}}}, False),
+        ({"payload": {"text": "Sure"}}, True),
+        ({"payload": {"text": " yes "}}, True),
+        ({"payload": {"text": "later"}}, False),
+    ],
+    ids=["object-yes", "object-no", "button-yes", "button-no", "typed-agents-word", "typed-adks-word", "typed-other"],
+)
+def test_the_agent_decides_what_an_answer_means(confirmation, meaning):
+    assert agreed(confirmation) is meaning
+
+
+def test_a_resumed_confirmation_goes_to_the_answer_not_to_a_command(sent):
+    ctx = _ctx(user_content=_confirmed({"payload": {"text": "sure"}}))
+
+    async def drain():
+        return [event async for event in create_agent()._run_async_impl(ctx)]
+
+    assert answered_confirmation(ctx) == {"payload": {"text": "sure"}}
+    assert asyncio.run(drain()) == []
+    (content, _), = sent
+    assert _is_text_artifact(content)
+    assert content.parts[0].text.startswith('You typed "sure". Confirmed')
 
 
 def test_fail_explains_then_raises_its_reason(sent):

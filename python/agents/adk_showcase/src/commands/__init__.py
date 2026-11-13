@@ -11,6 +11,7 @@ from src.commands import (
     card,
     composite,
     config,
+    confirm,
     context,
     data,
     fail,
@@ -30,7 +31,7 @@ from src.commands import (
 )
 
 COMMANDS = (
-    help, stream, sections, llm, thinking, card, artifact, file, data, composite, ask,
+    help, stream, sections, llm, thinking, card, artifact, file, data, composite, ask, confirm,
     react, post, metadata, progress, task, message, fail, context, attachment, config, http,
 )
 
