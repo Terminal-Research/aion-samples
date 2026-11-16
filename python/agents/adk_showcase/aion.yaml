@@ -6,38 +6,60 @@ aion:
       description: >-
         Guided tour of the platform features available to an agent:
         streaming, a model answer through the platform's model service, cards,
-        artifacts, multi-turn state, reactions, explicit A2A responses,
+        artifacts, human-in-the-loop, reactions, explicit A2A responses,
         runtime context, deployment configuration and custom HTTP routes.
-        Every other response is written by the agent itself.
+        Every other answer is written by the agent itself. What a command
+        produces is the task's result, an artifact; text around it is a message.
       version: "1.0.0"
-      input_modes: [ "text" ]
-      output_modes: [ "text" ]
+      # Clients read these to know what they may send and what comes back:
+      # files for `attachment`, and the CSV, data and card parts the
+      # commands answer with.
+      input_modes: [ "text", "image", "application/pdf" ]
+      output_modes: [ "text", "text/csv", "json", "application/vnd.aion.card+jsx" ]
       skills:
         - id: "feature_showcase"
           name: "Feature Showcase"
           description: >-
-            Each keyword runs one demonstration and replies with the SDK call
-            that produced it. Send "help" for the menu.
+            Each keyword runs one demonstration and names the SDK call that
+            produced it; add "native" after it to see the same done with ADK
+            alone. Send "help" for the menu.
           tags: [ "showcase", "streaming", "artifacts", "cards", "a2a", "adk" ]
           examples:
             - "help"
             - "stream"
+            - "sections"
             - "llm What is the A2A protocol?"
-            - "typing"
+            - "thinking"
             - "card"
+            - "artifact"
             - "file"
             - "data"
             - "composite"
             - "ask"
+            - "confirm"
             - "react"
+            - "post"
             - "metadata"
             - "progress"
             - "task"
             - "message"
             - "fail"
             - "context"
+            - "attachment"
             - "config"
             - "http"
+            - "stream native"
+            - "sections native"
+            - "llm native What is the A2A protocol?"
+            - "artifact native"
+            - "file native"
+            - "ask native"
+            - "confirm native"
+            - "metadata native"
+            - "message native"
+            - "fail native"
+            - "context native"
+            - "attachment native"
 
       # Filled in per environment by an administrator and delivered with the
       # invocation. The `config` command reads these back.
@@ -45,7 +67,7 @@ aion:
         greeting:
           type: "string"
           description: "Heading shown at the top of the menu"
-          default: "Aion Showcase"
+          default: "Aion Showcase — ADK"
         # An `llm` field is a model id; the control plane offers the catalog
         # for it. No default: whoever deploys the agent picks a model, and
         # `llm` says how to set one until then.

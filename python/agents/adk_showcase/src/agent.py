@@ -1,116 +1,53 @@
-"""Agent assembly for the showcase agent.
-
-One keyword per turn selects one handler. Every handler takes the same two
-arguments, so ``HANDLERS`` below is the whole of the dispatch: adding a
-demonstration means adding a registry entry, a handler, and one line there.
-"""
+"""The tour's agent: it reads the keyword of each turn and runs that command."""
 
 from __future__ import annotations
 
 import inspect
-from collections.abc import AsyncGenerator, Callable
+from collections.abc import AsyncGenerator
 
-from aion.adk.authoring.invocation import AionInvocationContext, Thread
+from aion.adk.authoring.invocation import AionInvocationContext
 from google.adk.agents import BaseAgent
 from google.adk.events import Event
 from typing_extensions import override
 
-import src.api  # registers the /showcase routes with the server
-from src.commands import parse_input
-from src.handlers import (
-    answer_handler,
-    ask_handler,
-    card_handler,
-    composite_handler,
-    config_handler,
-    context_handler,
-    data_handler,
-    fail_handler,
-    file_handler,
-    http_handler,
-    is_awaiting_answer,
-    llm_handler,
-    menu_handler,
-    message_handler,
-    metadata_handler,
-    progress_handler,
-    react_handler,
-    stream_handler,
-    task_handler,
-    typing_handler,
-)
-
-HANDLERS: dict[str, Callable] = {
-    "help": menu_handler,
-    "stream": stream_handler,
-    "llm": llm_handler,
-    "typing": typing_handler,
-    "card": card_handler,
-    "file": file_handler,
-    "data": data_handler,
-    "composite": composite_handler,
-    "ask": ask_handler,
-    "react": react_handler,
-    "metadata": metadata_handler,
-    "progress": progress_handler,
-    "task": task_handler,
-    "message": message_handler,
-    "fail": fail_handler,
-    "context": context_handler,
-    "config": config_handler,
-    "http": http_handler,
-}
-
-
-def _inbound_text(ctx: AionInvocationContext) -> str:
-    """Return the text of the inbound turn, or the pressed card button's id.
-
-    Card buttons carry a developer-defined ``action_id``. This agent uses the
-    command key as the action id, so a press is handled exactly like typing
-    that keyword.
-    """
-    runtime = ctx.aion_runtime_context
-    if runtime is None:
-        return ""
-
-    event = runtime.event
-    action_id = getattr(event.payload, "action_id", None) if event and event.payload else None
-    if action_id:
-        return action_id
-
-    thread = Thread.from_context(runtime)
-    return thread.message.text if thread.message else ""
+from src.commands import BY_KEY, ask, confirm, help, llm
+from src.tour.routing import inbound_text, not_native, parse_input
 
 
 class ShowcaseAgent(BaseAgent):
-    """Routes one keyword per turn to the demonstration it names."""
+    """Runs one command per turn: ``with_sdk``, or ``with_adk`` for ``<command> native``."""
 
     @override
-    async def _run_async_impl(
-        self,
-        ctx: AionInvocationContext,
-    ) -> AsyncGenerator[Event, None]:
-        text = _inbound_text(ctx)
-
-        # An open question takes precedence: this turn carries its answer, not
-        # a new command. ADK ends the turn when it asks, so session state is
-        # what links the two turns together.
-        if is_awaiting_answer(ctx):
-            async for event in answer_handler(ctx, text):
-                yield event
+    async def _run_async_impl(self, ctx: AionInvocationContext) -> AsyncGenerator[Event, None]:
+        # A turn that resumes `ask` or `confirm` carries the answer to the call
+        # the run paused on, not a new command.
+        reply = ask.answered_question(ctx)
+        if reply is not None:
+            await ask.answer(ctx, reply)
+            return
+        confirmation = confirm.answered_confirmation(ctx)
+        if confirmation is not None:
+            await confirm.answer(ctx, confirmation)
             return
 
+        text = inbound_text(ctx)
         parsed = parse_input(text)
-        if parsed.command is None:
-            await menu_handler(ctx, text)
+        if parsed.key is None:
+            await help.with_sdk(ctx, text)
             return
 
-        # Every handler takes (context, argument); a handler that accepts no
-        # argument ignores it. The one thing dispatch has to tell apart is the
-        # shape of what comes back: a handler that only talks through `Thread`
-        # is a coroutine to await, while one that must write session state or
-        # fill the A2A outbox is an async generator of ADK events to forward.
-        result = HANDLERS[parsed.command.key](ctx, parsed.argument)
+        command = BY_KEY[parsed.key]
+        if not parsed.native:
+            result = command.with_sdk(ctx, parsed.argument)
+        elif hasattr(command, "with_adk"):
+            result = command.with_adk(ctx, parsed.argument)
+        elif command.COMMAND.no_native:
+            result = not_native(ctx, parsed.key)
+        else:
+            # `ask`, `confirm` and `llm` already are ADK's own: `native` runs them as they are.
+            result = command.with_sdk(ctx, parsed.argument)
+
+        # A command is a coroutine to await, or an async generator of ADK events to forward.
         if inspect.isasyncgen(result):
             async for event in result:
                 yield event
@@ -119,8 +56,14 @@ class ShowcaseAgent(BaseAgent):
 
 
 def create_agent() -> ShowcaseAgent:
-    """Build the showcase agent."""
+    """Build the agent; the Aion server runs it.
+
+    The `llm` command's ``LlmAgent`` is declared in ``sub_agents``, so ADK
+    knows the agents that answer in this conversation: a turn after `llm`
+    comes back to the showcase.
+    """
     return ShowcaseAgent(
         name="showcase",
         description="Guided tour of the Aion platform features, built with Google ADK",
+        sub_agents=[llm.build_agent()],
     )

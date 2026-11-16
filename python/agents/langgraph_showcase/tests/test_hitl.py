@@ -2,7 +2,7 @@
 
 from langchain_core.messages import HumanMessage
 
-from src.nodes.hitl import _resumed_text
+from src.commands.ask import _resumed_text
 
 
 def test_plain_string_is_taken_as_is():

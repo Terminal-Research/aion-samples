@@ -10,7 +10,7 @@ you have your own agent.
 | --- | --- | --- | --- |
 | [langgraph_plain](python/agents/langgraph_plain/README.md) | LangGraph | A graph with no Aion imports, served as is: input into state, reply out of it, conversation remembered between turns | None |
 | [adk_plain](python/agents/adk_plain/README.md) | Google ADK | The same with a `BaseAgent`: user content in, one event out, session remembered between turns | None |
-| [langgraph_showcase](python/agents/langgraph_showcase/README.md) | LangGraph | Guided tour of every platform feature an agent can use: streaming, a model answer, cards, artifacts, human-in-the-loop, reactions, A2A task/message, runtime context, configuration, custom HTTP routes | Aion credentials for `llm` only |
+| [langgraph_showcase](python/agents/langgraph_showcase/README.md) | LangGraph | Guided tour of every platform feature an agent can use: streaming in one or several sections, a model answer, thoughts, cards, artifacts, human-in-the-loop, reactions, reply and post, A2A task/message, failing with a reason, runtime context, files from the user, configuration, custom HTTP routes | Aion credentials for `llm` only |
 | [adk_showcase](python/agents/adk_showcase/README.md) | Google ADK | The same tour, written with the Google ADK authoring toolkit | Aion credentials for `llm` only |
 
 Start with a plain sample if you already have a graph or an agent: it shows what the
@@ -20,6 +20,9 @@ to see each platform feature on its own, one keyword per feature.
 Both showcase agents expose the same keywords, so you can read whichever framework you
 work in and skip the other. Where a framework's own mechanism differs — how a turn waits
 for the user, how an artifact grows — each sample explains its own, in its own terms.
+Add `native` after a keyword, `stream native` for example, to see the same demonstration
+done with the framework alone, without the SDK's API; where the framework has no way of
+its own, the agent says so and names the SDK call to use.
 
 The showcase agents write their own replies, so what you see is platform behaviour rather
 than model output. The one exception is the `llm` command, where a model from the Aion
@@ -41,6 +44,10 @@ Then talk to it from the terminal chat client:
 npm install -g @terminal-research/aion
 aio --agent-id showcase --url http://localhost:8000
 ```
+
+The SDK every sample installs ships the same client, so from a sample's directory
+`poetry run aion chat --url http://localhost:8000 --agent-id showcase` works too. On
+macOS it runs a binary bundled with the SDK; elsewhere it needs Node.js.
 
 Send `help` to get the list of commands. For a plain sample use `--agent-id plain` and
 send anything.
