@@ -13,8 +13,8 @@ starts ``aion serve`` with no credentials and sends each skill example from
 each mode in a conversation of its own.
 
 What a turn must end in is the same for every sample: ``FAILED`` for ``fail``,
-``INPUT_REQUIRED`` for ``ask`` (answered at once, after which the same task must
-complete), and ``COMPLETED`` for everything else. A task that stops short of ``COMPLETED`` must
+``INPUT_REQUIRED`` for ``ask`` and ``confirm`` (answered at once, after which the same
+task must complete), and ``COMPLETED`` for everything else. A task that stops short of ``COMPLETED`` must
 say why in its status message. The text of the answers is not checked.
 """
 
@@ -47,7 +47,11 @@ KEYS_PATH = "/runtime/a2a/verification-keys"
 ISSUER = "aion.io"
 SESSION_AUDIENCE = "urn:aion:a2a:anonymous-session"
 SESSION_LIFETIME = 30 * 24 * 3600
-EXPECTED_STATE = {"fail": "TASK_STATE_FAILED", "ask": "TASK_STATE_INPUT_REQUIRED"}
+EXPECTED_STATE = {
+    "fail": "TASK_STATE_FAILED",
+    "ask": "TASK_STATE_INPUT_REQUIRED",
+    "confirm": "TASK_STATE_INPUT_REQUIRED",
+}
 ANSWER = "staging"
 START_TIMEOUT = 180
 REQUEST_TIMEOUT = 120
