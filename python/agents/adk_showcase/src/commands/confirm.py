@@ -7,7 +7,8 @@ the user's reply comes back as the call's function response, an ADK
 ``ToolConfirmation``:
 
 - ``{"confirmed": true}`` - the client sent ADK's own object;
-- ``{"payload": {"data": {..., "actionId": "approve"}}}`` - a button was pressed;
+- ``{"payload": {"text": "approve"}}`` - a button was pressed, and its action id
+  is the text; the turn's event says it was a press;
 - ``{"payload": {"text": "sure"}}`` - the answer was typed.
 
 The SDK reads no button and no word as a yes: whatever is not ADK's object
@@ -100,25 +101,26 @@ def answered_confirmation(ctx: AionInvocationContext) -> Optional[dict[str, Any]
 
 
 def agreed(confirmation: dict[str, Any]) -> bool:
-    """What this agent takes the answer to mean: ADK's object as it says, else its own reading."""
+    """What this agent takes the answer to mean: ADK's object as it says, else its own reading.
+
+    The payload's text is the action id of a pressed button or the typed
+    answer: ``approve`` and the agent's yes-words confirm.
+    """
     if "confirmed" in confirmation:
         return bool(confirmation["confirmed"])
-    answer = confirmation.get("payload") or {}
-    pressed = (answer.get("data") or {}).get("actionId")
-    if pressed:
-        return pressed == APPROVE
-    return str(answer.get("text", "")).strip().lower() in YES
+    said = str((confirmation.get("payload") or {}).get("text", "")).strip().lower()
+    return said == APPROVE or said in YES
 
 
-def _how(confirmation: dict[str, Any]) -> str:
-    """How the user answered, in the words of the reply."""
+def _how(ctx: AionInvocationContext, confirmation: dict[str, Any]) -> str:
+    """How the user answered: the turn's event tells a pressed button from a typed answer."""
     if "confirmed" in confirmation:
         return "You sent ADK's confirmation object."
-    answer = confirmation.get("payload") or {}
-    pressed = (answer.get("data") or {}).get("actionId")
+    event = ctx.aion_runtime_context.event
+    pressed = getattr(event.payload, "action_id", None) if event and event.payload else None
     if pressed:
         return f'You pressed the button "{pressed}".'
-    return f'You typed "{answer.get("text", "")}".'
+    return f'You typed "{(confirmation.get("payload") or {}).get("text", "")}".'
 
 
 async def answer(ctx: AionInvocationContext, confirmation: dict[str, Any]) -> None:
@@ -129,4 +131,4 @@ async def answer(ctx: AionInvocationContext, confirmation: dict[str, Any]) -> No
         if agreed(confirmation)
         else "Not confirmed: the build cache stays."
     )
-    await thread.reply(text_artifact(f"{_how(confirmation)} {verdict}" + COMMAND.footer))
+    await thread.reply(text_artifact(f"{_how(ctx, confirmation)} {verdict}" + COMMAND.footer))

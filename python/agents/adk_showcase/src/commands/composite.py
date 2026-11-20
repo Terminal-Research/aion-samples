@@ -28,9 +28,8 @@ async def with_sdk(ctx: AionInvocationContext, argument: str) -> None:
     artifact_id = str(uuid.uuid4())
     chapters = ("Chapter one. ", "Chapter two. ", "Chapter three.")
     for index, chapter in enumerate(chapters):
-        await emit_artifact(
+        emit_artifact(
             emitter,
-            ctx,
             file_artifact(chapter.encode(), mime_type="text/plain", name="story.txt", artifact_id=artifact_id),
             append=index > 0,
             is_last_chunk=index == len(chapters) - 1,
