@@ -99,8 +99,8 @@ Keywords are case-insensitive and tolerate a leading verb, so `card`, `Show me t
 and `/card` all select the same demonstration. Anything unrecognized returns the menu.
 The card sent by `card` carries a button whose action id is a keyword, so pressing it
 is handled by the same handler as typing that keyword. The buttons of `confirm` answer
-its question instead: the task waits for the answer, and a pressed button comes back in
-the confirmation's payload with its action id, `approve` or `reject`.
+its question instead: the task waits for the answer, and a pressed button comes back as
+the text of the confirmation's payload, its action id `approve` or `reject`.
 
 ## How it is put together
 

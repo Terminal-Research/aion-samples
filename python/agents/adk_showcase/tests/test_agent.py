@@ -307,8 +307,8 @@ def _confirmed(response: dict) -> types.Content:
     [
         ({"confirmed": True}, True),
         ({"confirmed": False}, False),
-        ({"payload": {"data": {"userId": "U1", "actionId": "approve"}}}, True),
-        ({"payload": {"data": {"userId": "U1", "actionId": "reject"}}}, False),
+        ({"payload": {"text": "approve"}}, True),
+        ({"payload": {"text": "reject"}}, False),
         ({"payload": {"text": "Sure"}}, True),
         ({"payload": {"text": " yes "}}, True),
         ({"payload": {"text": "later"}}, False),
